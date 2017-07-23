@@ -5,7 +5,7 @@ var game;
 
 function tetris_run() {
   if (!socket) {
-      socket = io({query:"type=" + type});
+      socket = io({query:"type=player"});
       setupSocket(socket);
   }
 
@@ -41,7 +41,7 @@ function setupSocket(socket) {
     });
 
 }
-
+// 이제 여기에서 어떤 버튼이 눌린 후 socket.on으로 그 기다리면 될듯 한데 한번 얘기를 해 봐야겠다.
 function keyPressed(){
   var mustpause = false;
   if(game.getisPause()){
@@ -79,7 +79,6 @@ function keyPressed(){
       socket.emit('Enter_Key');
     }
     redraw();
-
   }
 }
 
