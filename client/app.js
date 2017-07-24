@@ -4,11 +4,11 @@ var socket;
 var game;
 
 function tetris_run() {
+  // 위치 지정을 위한 처리도 해 주어야 한다.
   if (!socket) {
       socket = io({query:"type=player"});
       setupSocket(socket);
   }
-
   socket.emit('respawn');
 }
 
@@ -40,8 +40,41 @@ function setupSocket(socket) {
         console.log( data.name + ' : Disconnected in server');
     });
 
+    socket.on('UpdateCurrentBlock', function(blockData) {
+        game.block.currentBlock = blockData.data;
+        redraw();
+    });
+
+    socket.on('UpdateBlockY', function(blockData) {
+        game.block.Y = blockData.data;
+        redraw();
+    });
+
+    socket.on('UpdateBlockX', function(blockData) {
+        game.block.X = blockData.data;
+        redraw();
+    });
+
+    socket.on('UpdateBlock', function(blockObject, holdable) {
+        game.block = blockData;
+        game.setHoldable(holdable.data);
+        redraw();
+    });
+
+    socket.on('UpdateIsPause', function(pauseData) {
+      game.setIsPause = pauseData.data;
+      redraw();
+    });
+
+    socket.on('serverTellPlayerMove', function(gameObject) {
+      game = gameObject;
+      redraw();
+    });
+
+
+
 }
-// 이제 여기에서 어떤 버튼이 눌린 후 socket.on으로 그 기다리면 될듯 한데 한번 얘기를 해 봐야겠다.
+
 function keyPressed(){
   var mustpause = false;
   if(game.getisPause()){
@@ -62,6 +95,7 @@ function keyPressed(){
     }else if(keyCode === KEY_SPACE){/*space bar*/
       socket.emit('Space_Key');
     }else if(keyCode === KEY_SHIFT){/*shift*/
+      // hold 할 수 없으면 전송하지 않는다.
       if(game.getHoldable()){
         socket.emit('Shift_Key');
       }

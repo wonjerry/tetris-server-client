@@ -11,7 +11,6 @@ var BOARD_HEIGHT = 20;
 /*여기서 block은 실제 테트리스 게임에 나오는 블록을 이루는 작은 네모들이다.*/
 var BLOCK_WIDTH = 30;
 var BLOCK_HEIGHT = 30;
-
 /*떨어지는 시간을 정의하였다.*/
 var FALLING_TIME = 400;
 
@@ -23,6 +22,7 @@ var KEY_SHIFT = 16;
 var users = [];
 var sockets = {};
 
+app.use(express.static(__dirname + '/../client'));
 
 /*블록 개체들을 다루기 위한 클래스 이다.*/
 function Shape() {
@@ -431,42 +431,41 @@ io.on('connection', function (socket) {
         socket.broadcast.emit('playerDisconnect', { name: currentPlayer.id });
     });
 
-    // 이건 뭔지 모르겠다.
     // 나는 어떤 키보드가 눌렸을 경우는 on 하고 있다가 눌리면 그것에 대한 응답 및 처리를 즉각적으로 해 주어야 한다.
     // 그럼 이런 방식으로 key 값에 대한 응답 내용을 작성하면 될 듯 하다.
     socket.on('Up_Key', function() {
         if(currentPlayer.rotateLeft()){
-          socket.emit('UpdateCurrentBlock', currentPlayer.getCurrentBlock() );
+          socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
         }
     });
 
     socket.on('Down_Key', function() {
       if(currentPlayer.steerDown()){
-        socket.emit('UpdateBlockY', currentPlayer.getBlockY() );
+        socket.emit('UpdateBlockY', {data : currentPlayer.getBlockY()} );
       }
     });
 
     socket.on('Left_Key', function() {
       if(currentPlayer.steerLeft()){
-        socket.emit('UpdateBlockX', currentPlayer.getBlockX() );
+        socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
       }
     });
 
     socket.on('Right_Key', function() {
       if(currentPlayer.steerRight()){
-        socket.emit('UpdateBlockX', currentPlayer.getBlockX() );
+        socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
       }
     });
 
     socket.on('A_Key', function() {
       if(currentPlayer.rotateLeft()){
-        socket.emit('UpdateCurrentBlock', currentPlayer.getCurrentBlock() );
+        socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
       }
     });
 
     socket.on('S_Key', function() {
       if(currentPlayer.rotateRight()){
-        socket.emit('UpdateCurrentBlock', currentPlayer.getCurrentBlock() );
+        socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
       }
     });
 
@@ -487,20 +486,20 @@ io.on('connection', function (socket) {
 
     socket.on('Space_Key', function() {
       currentPlayer.letFall()
-      socket.emit('UpdateBlockX', currentPlayer.getBlockX() );
+      socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
     });
 
     socket.on('Shift_Key', function() {
       /*이건 holdable 여부로 안나누는 이유는 클라이언트에서 holdable에 따라서 전송을 막아야 트래픽을 아낄 수 있기 때문이다.
       서버에서 판정하면 클라이언트에서는 계속 shift 키를 누를 때 마다 요청을 보낼 것 이다.*/
       currentPlayer.hold();
-      socket.emit('UpdateBlock', currentPlayer.Block );
+      socket.emit('UpdateBlock', currentPlayer.Block, {data : game.getHoldable()});
     });
 
     socket.on('Enter_Key', function() {
-      /*이건 holdable 여부로 안나누는 이유는 클라이언트에서 holdable에 따라서 전송을 막아야 트래픽을 아낄 수 있기 때문이다.
-      서버에서 판정하면 클라이언트에서는 계속 shift 키를 누를 때 마다 요청을 보낼 것 이다.*/
+
       if(currentPlayer.getisPause()){
+        currentPlayer.setIsPause(false);
         currentPlayer.intervalHandler = setInterval(
           function () {
             if (currentPlayer.go()){
@@ -511,11 +510,10 @@ io.on('connection', function (socket) {
           },
           FALLING_TIME
         );
-        currentPlayer.setIsPause(false);
       }else{
         clearInterval(currentPlayer.intervalHandler);
         currentPlayer.setIsPause(true);
-        socket.emit('UpdateIsPause', currentPlayer.getisPause());
+        socket.emit('UpdateIsPause', {data : currentPlayer.getisPause()});
       }
 
     });
