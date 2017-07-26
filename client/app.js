@@ -1,7 +1,19 @@
 
 var io = require('socket.io-client');
 var socket;
-var game;
+var game = {};
+var p5Object;
+
+/*테트리스 게임이 진행되는 부분을 borad라고 정의하고 그 borad의 너비와 높이를 정하였다.*/
+var BOARD_WIDTH = 10;
+var BOARD_HEIGHT = 20;
+
+/*여기서 block은 실제 테트리스 게임에 나오는 블록을 이루는 작은 네모들이다.*/
+var BLOCK_WIDTH = 30;
+var BLOCK_HEIGHT = 30;
+
+var KEY_SPACE = 32;
+var KEY_SHIFT = 16;
 
 function tetris_run() {
   // 위치 지정을 위한 처리도 해 주어야 한다.
@@ -28,8 +40,31 @@ function setupSocket(socket) {
 
     // Handle connection.
     socket.on('welcome', function (playerSettings) {
-        game = playerSettings;
-        socket.emit('gotit', game);
+
+      game.startX = playerSettings.startX;
+      game.isGameOver = playerSettings.isGameOver;
+      game.isPause = playerSettings.isPause;
+      game.holdable = playerSettings.holdable;
+      game.score = playerSettings.score;
+      game.X = playerSettings.X;
+      game.Y = playerSettings.Y;
+      game.currentBlock = [];
+      for(var i=0; i<4; i++){
+        game.currentBlock[i] = playerSettings.currentBlock[i].slice();
+      }
+      game.nextBlock = [];
+      for(var i=0; i<4; i++){
+        game.nextBlock[i] = playerSettings.nextBlock[i].slice();
+      }
+      game.holdBlock = [];
+      for(var i=0; i<4; i++){
+        game.holdBlock[i] = playerSettings.holdBlock[i].slice();
+      }
+      game.board = [];
+      for(var i=0; i<BOARD_HEIGHT; i++){
+        game.board[i] = playerSettings.board[i].slice();
+      }
+      socket.emit('gotit');
     });
 
     socket.on('playerJoin', function (data) {
@@ -41,100 +76,72 @@ function setupSocket(socket) {
     });
 
     socket.on('UpdateCurrentBlock', function(blockData) {
-        game.block.currentBlock = blockData.data;
-        redraw();
+      game.currentBlock = [];
+      for(var i =0; i<4; i++){
+        game.currentBlock[i] = blockData.data[i].slice();
+      }
+      console.log(blockData.data);
+      console.log(game.currentBlock);
+      p5Object.redraw();
     });
 
     socket.on('UpdateBlockY', function(blockData) {
-        game.block.Y = blockData.data;
-        redraw();
+        game.Y = blockData.data;
+        p5Object.redraw();
     });
 
     socket.on('UpdateBlockX', function(blockData) {
-        game.block.X = blockData.data;
-        redraw();
+        game.X = blockData.data;
+        p5Object.redraw();
     });
 
     socket.on('UpdateBlock', function(blockObject, holdable) {
         game.block = blockData;
         game.setHoldable(holdable.data);
-        redraw();
+        p5Object.redraw();
     });
 
     socket.on('UpdateIsPause', function(pauseData) {
-      game.setIsPause = pauseData.data;
-      redraw();
+      game.isPause = pauseData.data;
+      p5Object.redraw();
     });
 
-    socket.on('serverTellPlayerMove', function(gameObject) {
-      game = gameObject;
-      redraw();
-    });
+    socket.on('serverTellPlayerMove', function(playerSettings) {
 
-
-
-}
-
-function keyPressed(){
-  var mustpause = false;
-  if(game.getisPause()){
-    if(keyCode === ENTER){
-      socket.emit('Enter_Key');
-    }else if(key === 'R'){
-      socket.emit('R_Key');
-    }
-  }else{
-    if(keyCode === ENTER){
-      mustpause = true;
-    }else if(key === 'R'){
-      socket.emit('R_Key');
-    }else if(key === 'A'){
-      socket.emit('A_Key');
-    }else if(key === 'S'){
-      socket.emit('S_Key');
-    }else if(keyCode === KEY_SPACE){/*space bar*/
-      socket.emit('Space_Key');
-    }else if(keyCode === KEY_SHIFT){/*shift*/
-      // hold 할 수 없으면 전송하지 않는다.
-      if(game.getHoldable()){
-        socket.emit('Shift_Key');
+      game.startX = playerSettings.startX;
+      game.isGameOver = playerSettings.isGameOver;
+      game.isPause = playerSettings.isPause;
+      game.holdable = playerSettings.holdable;
+      game.score = playerSettings.score;
+      game.X = playerSettings.X;
+      game.Y = playerSettings.Y;
+      game.currentBlock = [];
+      for(var i=0; i<4; i++){
+        game.currentBlock[i] = playerSettings.currentBlock[i].slice();
       }
-    }else if(keyCode === LEFT_ARROW){
-      socket.emit('Left_Key');
-    }else if(keyCode === RIGHT_ARROW){
-      socket.emit('Right_Key');
-    }else if(keyCode === DOWN_ARROW){
-      socket.emit('Down_Key');
-    }else if(keyCode === UP_ARROW){
-      socket.emit('Up_Key');
-    }
+      game.nextBlock = [];
+      for(var i=0; i<4; i++){
+        game.nextBlock[i] = playerSettings.nextBlock[i].slice();
+      }
+      game.holdBlock = [];
+      for(var i=0; i<4; i++){
+        game.holdBlock[i] = playerSettings.holdBlock[i].slice();
+      }
+      game.board = [];
+      for(var i=0; i<BOARD_HEIGHT; i++){
+        game.board[i] = playerSettings.board[i].slice();
+      }
+      p5Object.redraw();
+    });
 
-    if (mustpause) {
-      socket.emit('Enter_Key');
-    }
-    redraw();
-  }
 }
 
-/*************여기서 부터는 게임 화면을 그리는 부분이다.****************혀/
-
-/*P5.js의 메소드 이다. 프로그램이 실행 되기전 전처리를 맡는다.*/
-function setup() {
-  createCanvas(1500, 850);
-  textSize(20);
-  noLoop();
-  tetris_run();
-}
-
-/*P5.js의 메소드 이다. redraw()에 의해 반복적으로 호출되어 게임 화면을 현재 상태에 맞게 그려준다.*/
-
-function draw(){
-    clear();
-    draw_nextBlock(game.getNextBlock(),game.startX,0);
-    draw_holdBlock(game.getHoldBlock(),game.startX,0);
-    draw_tetrisBoard(game.getBoard(),game.startX,0);
-    draw_score(game.getScore(),game.startX,0);
-    draw_state(game.getisPause(),game.getisGameover(),game.startX,0);
+function draw_tetrisGame(){
+  draw_nextBlock(game.nextBlock,game.startX,0);
+  draw_holdBlock(game.holdBlock,game.startX,0);
+  draw_tetrisBoard(game.board,game.startX,0);
+  draw_score(game.score,game.startX,0);
+  draw_state(game.isPause,game.isGameOver,game.startX,0);
 }
 
 function draw_tetrisBoard(board,Sx,Sy){
@@ -145,8 +152,8 @@ function draw_block(board, rowNum, colNum ,Sx,Sy){
    for(var i = 0; i < rowNum; i++){
     for(var j = 0; j < colNum; j++){
       /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
-      push();
-      translate(Sx + j*BLOCK_WIDTH ,Sy + i*BLOCK_HEIGHT);
+      p5Object.push();
+      p5Object.translate(Sx + j*BLOCK_WIDTH ,Sy + i*BLOCK_HEIGHT);
       var colorType = '#000000';
       switch (board[i][j]) {
         case 11:
@@ -171,67 +178,109 @@ function draw_block(board, rowNum, colNum ,Sx,Sy){
           colorType = '#a12a5e';
           break;
       }
-      fill(color(colorType));/*black*/
-      rect(0,0,BLOCK_WIDTH,BLOCK_HEIGHT);
-      pop();
+      p5Object.fill(p5Object.color(colorType));/*black*/
+      p5Object.rect(0,0,BLOCK_WIDTH,BLOCK_HEIGHT);
+      p5Object.pop();
     }
   }
 }
 
 function draw_nextBlock(board,Sx,Sy){
-  push();
-  translate(0 + Sx,0 + Sy);
-  text("Next Block", 0, 20);
-  pop();
+  p5Object.push();
+  p5Object.translate(0 + Sx,0 + Sy);
+  p5Object.text("Next Block", 0, 20);
+  p5Object.pop();
   draw_block(board,4,4,0+Sx,30+Sy);
 }
 
 function draw_holdBlock(board,Sx,Sy){
-  push();
-  translate(180+Sx,0+Sy);
-  text("Hold Block", 0, 20);
-  pop();
+  p5Object.push();
+  p5Object.translate(180+Sx,0+Sy);
+  p5Object.text("Hold Block", 0, 20);
+  p5Object.pop();
   draw_block(board,4,4,180+Sx,30+Sy);
 
 }
 
 function draw_score(score,Sx,Sy){
   var str = "SCORE";
-  push();
-  translate(0+Sx,790+Sy);
-  rect(0, 0, 120, 50);
-  text(str, 10, 20);
-  text(score, 10, 45);
-  pop();
+  p5Object.push();
+  p5Object.translate(0+Sx,790+Sy);
+  p5Object.rect(0, 0, 120, 50);
+  p5Object.text(str, 10, 20);
+  p5Object.text(score||0, 10, 45);
+  p5Object.pop();
 }
 
 function draw_state(isPaused, isGameOver,Sx,Sy){
-  push();
-  translate(180+Sx,790+Sy);
-  rect(0, 0, 120, 50);
+  p5Object.push();
+  p5Object.translate(180+Sx,790+Sy);
+  p5Object.rect(0, 0, 120, 50);
 
   if(isGameOver){
-    text("GAME OVER", 10, 35);
-    pop();
+    p5Object.text("GAME OVER", 10, 35);
+    p5Object.pop();
     return;
   }
 
   if(isPaused){
-    text("PAUSED", 25, 35);
+    p5Object.text("PAUSED", 25, 35);
   }
-  pop();
+  p5Object.pop();
 }
 
-function draw_keys(){
-  push();
-  translate(0,400);
-  text("keys", 20, 20);
+var p5sketch = function(p) {
+    p5Object = p;
+    p.setup = function() {
+        p.createCanvas(1500, 850);
+        p.textSize(20);
+        p.noLoop();
+        tetris_run();
+      }
+    p.draw = function(){
+      p.clear();
+      draw_tetrisGame();
+    }
+    p.keyPressed = function(){
+      var mustpause = false;
+      if(game.isPause){
+        if(p.keyCode === p.ENTER){
+          socket.emit('Enter_Key');
+        }else if(p.key === 'R'){
+          socket.emit('R_Key');
+        }
+      }else{
+        if(p.keyCode === p.ENTER){
+          mustpause = true;
+        }else if(p.key === 'R'){
+          socket.emit('R_Key');
+        }else if(p.key === 'A'){
+          socket.emit('A_Key');
+        }else if(p.key === 'S'){
+          socket.emit('S_Key');
+        }else if(p.keyCode === KEY_SPACE){/*space bar*/
+          socket.emit('Space_Key');
+        }else if(p.keyCode === KEY_SHIFT){/*shift*/
+          // hold 할 수 없으면 전송하지 않는다.
+          if(game.holdable){
+            socket.emit('Shift_Key');
+          }
+        }else if(p.keyCode === p.LEFT_ARROW){
+          socket.emit('Left_Key');
+        }else if(p.keyCode === p.RIGHT_ARROW){
+          socket.emit('Right_Key');
+        }else if(p.keyCode === p.DOWN_ARROW){
+          socket.emit('Down_Key');
+        }else if(p.keyCode === p.UP_ARROW){
+          socket.emit('Up_Key');
+        }
 
-  text("Cursor Keys : Steer", 20, 60);
-  text("a/s/up key : Rotate", 20, 80);
-  text("Space bar : Let fall", 20, 100);
-  text("shift : hold block", 20, 120);
-  text("Enter : Toggle pause", 20, 140);
-  text("r : Restart game", 20, 160);
-  pop();
-}
+        if (mustpause) {
+          socket.emit('Enter_Key');
+        }
+        p.redraw();
+      }
+    }
+  }
+
+  new p5(p5sketch, 'myp5sketch');

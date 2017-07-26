@@ -181,7 +181,7 @@ Shape.prototype.emptyCheck = function(block){
 /*전체적으로 게임을 진행시키기 위한 데이터와 메소드를 담고있는 객체*/
 function TetrisGame(){
 
-  this.intervalHandler;
+  this.intervalHandler = -1;
 
   this.isGameOver = false;
   this.isPause = false;
@@ -266,7 +266,7 @@ TetrisGame.prototype.steerDown = function() {
 }
 
 TetrisGame.prototype.rotateLeft = function() {
-var newBlock = rotateLeft(this.block.currentBlock);
+var newBlock = this.block.rotateLeft(this.block.currentBlock);
   if(!this.block.intersectCheck(this.block.Y, this.block.X ,newBlock, this.board)){
      this.block.currentBlock = newBlock;
      return true;
@@ -366,6 +366,23 @@ TetrisGame.prototype.getBoard = function() {
 return this.block.applyBlock(this.block.Y, this.block.X ,this.block.currentBlock, this.board);
 }
 
+TetrisGame.prototype.getGameData = function() {
+  return {
+    id: this.id,
+    startX: this.startX,
+    isGameOver: this.getisGameover(),
+    isPause: this.getisPause(),
+    holdable: this.getHoldable(),
+    score : this.getScore(),
+    X: this.block.X,
+    Y: this.block.Y,
+    currentBlock: this.getCurrentBlock(),
+    nextBlock: this.getNextBlock(),
+    holdBlock: this.getHoldBlock(),
+    board : this.getBoard()
+  };
+}
+
 
 
 /*클라이언트에서 접속이 이루어지고 서버로 요청이 들어오면 받아서 새로운 플레이어를 만들어 준다 그리고 클라이언트에 보내준다..*/
@@ -373,7 +390,6 @@ io.on('connection', function (socket) {
     console.log('A user connected!');
     /*클라이언트에서 io.on({query:"type=" + type}) 이라고 어떤 토큰을 주면 서버에서서는 소켓을 통해
     socket.handshake.query.type으로 받을 수 있나보다.*/
-
     var currentPlayer = new TetrisGame();
     currentPlayer.id = socket.id;
     currentPlayer.startX = users.length * 360;
@@ -383,23 +399,21 @@ io.on('connection', function (socket) {
         if (util.findIndex(users, currentPlayer.id) > -1)
             users.splice(util.findIndex(users, currentPlayer.id), 1);
         /*클라이언트에게 생성된 객체를 전송 해 준다.*/
-        socket.emit('welcome', currentPlayer);
+        socket.emit('welcome', currentPlayer.getGameData());
         console.log('[INFO] User respawned!');
     });
 
     /*해당 클라이언트에 socket에 대해 접속할 수 있는지의 여부를 따지고 응답 해 준다.*/
-    socket.on('gotit', function (player) {
+    socket.on('gotit', function () {
         console.log('[INFO] Player connecting....');
 
-        if (util.findIndex(users, player.id) > -1) {
+        if (util.findIndex(users, currentPlayer.id) > -1) {
             console.log('[INFO] Player ID is already connected, kicking.');
             socket.disconnect();
         } else {
           /*접속할 수 있으면 sockets배열에 사용자id 인덱스에 사용자를 추가한다 그리고 기본 셋팅을 초기화 해 준다.*/
             console.log('[INFO] Player connected!');
-            sockets[player.id] = socket;
-
-            currentPlayer = player;
+            sockets[currentPlayer.id] = socket;
             // 현재 들어온 player의 정보를 초기 세팅하고 users 배열에 넣는다.
             users.push(currentPlayer);
 
@@ -411,7 +425,7 @@ io.on('connection', function (socket) {
         currentPlayer.intervalHandler = setInterval(
           function () {
             if (currentPlayer.go()){
-              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer);
+              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
             }else{
               //게임 오버 되었을 경우를 처리 해줘야함.
               // 유저에게 어떤 시그널을 보내서 처리하게 한다든지 해야할듯
@@ -434,38 +448,38 @@ io.on('connection', function (socket) {
     // 나는 어떤 키보드가 눌렸을 경우는 on 하고 있다가 눌리면 그것에 대한 응답 및 처리를 즉각적으로 해 주어야 한다.
     // 그럼 이런 방식으로 key 값에 대한 응답 내용을 작성하면 될 듯 하다.
     socket.on('Up_Key', function() {
-        if(currentPlayer.rotateLeft()){
-          socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
+        if(currentPlayer.rotateRight()){
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
         }
     });
 
     socket.on('Down_Key', function() {
       if(currentPlayer.steerDown()){
-        socket.emit('UpdateBlockY', {data : currentPlayer.getBlockY()} );
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
       }
     });
 
     socket.on('Left_Key', function() {
       if(currentPlayer.steerLeft()){
-        socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
       }
     });
 
     socket.on('Right_Key', function() {
       if(currentPlayer.steerRight()){
-        socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
       }
     });
 
     socket.on('A_Key', function() {
       if(currentPlayer.rotateLeft()){
-        socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
       }
     });
 
     socket.on('S_Key', function() {
       if(currentPlayer.rotateRight()){
-        socket.emit('UpdateCurrentBlock', {data : currentPlayer.getCurrentBlock()} );
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
       }
     });
 
@@ -475,7 +489,7 @@ io.on('connection', function (socket) {
       currentPlayer.intervalHandler = setInterval(
         function () {
           if (currentPlayer.go()){
-            sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer);
+            sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
           }else{
             clearInterval(currentPlayer.intervalHandler);
           }
@@ -485,15 +499,15 @@ io.on('connection', function (socket) {
     });
 
     socket.on('Space_Key', function() {
-      currentPlayer.letFall()
-      socket.emit('UpdateBlockX', {data : currentPlayer.getBlockX()} );
+      currentPlayer.letFall();
+      socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
     });
 
     socket.on('Shift_Key', function() {
       /*이건 holdable 여부로 안나누는 이유는 클라이언트에서 holdable에 따라서 전송을 막아야 트래픽을 아낄 수 있기 때문이다.
       서버에서 판정하면 클라이언트에서는 계속 shift 키를 누를 때 마다 요청을 보낼 것 이다.*/
       currentPlayer.hold();
-      socket.emit('UpdateBlock', currentPlayer.Block, {data : game.getHoldable()});
+      socket.emit('serverTellPlayerMove', currentPlayer.getGameData() );
     });
 
     socket.on('Enter_Key', function() {
@@ -503,7 +517,7 @@ io.on('connection', function (socket) {
         currentPlayer.intervalHandler = setInterval(
           function () {
             if (currentPlayer.go()){
-              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer);
+              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
             }else{
               clearInterval(currentPlayer.intervalHandler);
             }
