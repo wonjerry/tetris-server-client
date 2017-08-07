@@ -134,6 +134,11 @@ function setupSocket(socket) {
       p5Object.redraw();
     });
 
+    socket.on('otherUsers', function(pauseData) {
+      game.isPause = pauseData.data;
+      p5Object.redraw();
+    });
+
 }
 
 function draw_tetrisGame(){
