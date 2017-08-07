@@ -187,29 +187,19 @@ process.chdir = function (dir) {
 process.umask = function() { return 0; };
 
 },{}],3:[function(require,module,exports){
-(function (global){
-
 var io = require('socket.io-client');
+var global = require('./global');
 var socket;
 var game = {};
 var p5Object;
 
-/*테트리스 게임이 진행되는 부분을 borad라고 정의하고 그 borad의 너비와 높이를 정하였다.*/
-var BOARD_WIDTH = 10;
-var BOARD_HEIGHT = 20;
-
-/*여기서 block은 실제 테트리스 게임에 나오는 블록을 이루는 작은 네모들이다.*/
-var BLOCK_WIDTH = 30;
-var BLOCK_HEIGHT = 30;
-
-var KEY_SPACE = 32;
-var KEY_SHIFT = 16;
-
 function tetris_run() {
   // 위치 지정을 위한 처리도 해 주어야 한다.
   if (!socket) {
-      socket = io({query:"type=player"});
-      setupSocket(socket);
+    socket = io({
+      query: "type=tetris"
+    });
+    setupSocket(socket);
   }
   socket.emit('respawn');
 }
@@ -217,133 +207,141 @@ function tetris_run() {
 // socket stuff.
 function setupSocket(socket) {
 
-    // Handle error.
-    socket.on('connect_failed', function () {
-        socket.close();
-        global.disconnected = true;
-    });
+  // Handle error.
+  socket.on('connect_failed', function() {
+    socket.close();
+    global.disconnected = true;
+  });
 
-    socket.on('disconnect', function () {
-        socket.close();
-        global.disconnected = true;
-    });
+  socket.on('disconnect', function() {
+    socket.close();
+    global.disconnected = true;
+  });
 
-    // Handle connection.
-    socket.on('welcome', function (playerSettings) {
+  // Handle connection.
+  socket.on('welcome', function(playerSettings) {
+    game.startX = playerSettings.startX;
+    game.isGameOver = playerSettings.isGameOver;
+    game.isPause = playerSettings.isPause;
+    game.holdable = playerSettings.holdable;
+    game.score = playerSettings.score;
+    game.X = playerSettings.X;
+    game.Y = playerSettings.Y;
+    game.currentBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.currentBlock[i] = playerSettings.currentBlock[i].slice();
+    }
+    game.nextBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.nextBlock[i] = playerSettings.nextBlock[i].slice();
+    }
+    game.holdBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.holdBlock[i] = playerSettings.holdBlock[i].slice();
+    }
+    game.board = [];
+    for (var i = 0; i < global.BOARD_HEIGHT; i++) {
+      game.board[i] = playerSettings.board[i].slice();
+    }
+    socket.emit('gotit');
+  });
 
-      game.startX = playerSettings.startX;
-      game.isGameOver = playerSettings.isGameOver;
-      game.isPause = playerSettings.isPause;
-      game.holdable = playerSettings.holdable;
-      game.score = playerSettings.score;
-      game.X = playerSettings.X;
-      game.Y = playerSettings.Y;
-      game.currentBlock = [];
-      for(var i=0; i<4; i++){
-        game.currentBlock[i] = playerSettings.currentBlock[i].slice();
-      }
-      game.nextBlock = [];
-      for(var i=0; i<4; i++){
-        game.nextBlock[i] = playerSettings.nextBlock[i].slice();
-      }
-      game.holdBlock = [];
-      for(var i=0; i<4; i++){
-        game.holdBlock[i] = playerSettings.holdBlock[i].slice();
-      }
-      game.board = [];
-      for(var i=0; i<BOARD_HEIGHT; i++){
-        game.board[i] = playerSettings.board[i].slice();
-      }
-      socket.emit('gotit');
-    });
+  socket.on('playerJoin', function(data) {
+    console.log('connected in server');
+  });
 
-    socket.on('playerJoin', function (data) {
-        console.log('connected in server');
-    });
+  socket.on('playerDisconnect', function(data) {
+    console.log(data.name + ' : Disconnected in server');
+  });
 
-    socket.on('playerDisconnect', function (data) {
-        console.log( data.name + ' : Disconnected in server');
-    });
+  socket.on('UpdateCurrentBlock', function(blockData) {
+    game.currentBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.currentBlock[i] = blockData.data[i].slice();
+    }
+    console.log(blockData.data);
+    console.log(game.currentBlock);
+    p5Object.redraw();
+  });
 
-    socket.on('UpdateCurrentBlock', function(blockData) {
-      game.currentBlock = [];
-      for(var i =0; i<4; i++){
-        game.currentBlock[i] = blockData.data[i].slice();
-      }
-      console.log(blockData.data);
-      console.log(game.currentBlock);
-      p5Object.redraw();
-    });
+  socket.on('UpdateBlockY', function(blockData) {
+    game.Y = blockData.data;
+    p5Object.redraw();
+  });
 
-    socket.on('UpdateBlockY', function(blockData) {
-        game.Y = blockData.data;
-        p5Object.redraw();
-    });
+  socket.on('UpdateBlockX', function(blockData) {
+    game.X = blockData.data;
+    p5Object.redraw();
+  });
 
-    socket.on('UpdateBlockX', function(blockData) {
-        game.X = blockData.data;
-        p5Object.redraw();
-    });
+  socket.on('UpdateBlock', function(blockObject, holdable) {
+    game.block = blockData;
+    game.setHoldable(holdable.data);
+    p5Object.redraw();
+  });
 
-    socket.on('UpdateBlock', function(blockObject, holdable) {
-        game.block = blockData;
-        game.setHoldable(holdable.data);
-        p5Object.redraw();
-    });
+  socket.on('UpdateIsPause', function(pauseData) {
+    game.isPause = pauseData.data;
+    p5Object.redraw();
+  });
 
-    socket.on('UpdateIsPause', function(pauseData) {
-      game.isPause = pauseData.data;
-      p5Object.redraw();
-    });
+  socket.on('serverTellPlayerMove', function(playerSettings) {
 
-    socket.on('serverTellPlayerMove', function(playerSettings) {
+    game.startX = playerSettings.startX;
+    game.isGameOver = playerSettings.isGameOver;
+    game.isPause = playerSettings.isPause;
+    game.holdable = playerSettings.holdable;
+    game.score = playerSettings.score;
+    game.X = playerSettings.X;
+    game.Y = playerSettings.Y;
+    game.currentBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.currentBlock[i] = playerSettings.currentBlock[i].slice();
+    }
+    game.nextBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.nextBlock[i] = playerSettings.nextBlock[i].slice();
+    }
+    game.holdBlock = [];
+    for (var i = 0; i < 4; i++) {
+      game.holdBlock[i] = playerSettings.holdBlock[i].slice();
+    }
+    game.board = [];
+    for (var i = 0; i < global.BOARD_HEIGHT; i++) {
+      game.board[i] = playerSettings.board[i].slice();
+    }
+    p5Object.redraw();
+  });
 
-      game.startX = playerSettings.startX;
-      game.isGameOver = playerSettings.isGameOver;
-      game.isPause = playerSettings.isPause;
-      game.holdable = playerSettings.holdable;
-      game.score = playerSettings.score;
-      game.X = playerSettings.X;
-      game.Y = playerSettings.Y;
-      game.currentBlock = [];
-      for(var i=0; i<4; i++){
-        game.currentBlock[i] = playerSettings.currentBlock[i].slice();
-      }
-      game.nextBlock = [];
-      for(var i=0; i<4; i++){
-        game.nextBlock[i] = playerSettings.nextBlock[i].slice();
-      }
-      game.holdBlock = [];
-      for(var i=0; i<4; i++){
-        game.holdBlock[i] = playerSettings.holdBlock[i].slice();
-      }
-      game.board = [];
-      for(var i=0; i<BOARD_HEIGHT; i++){
-        game.board[i] = playerSettings.board[i].slice();
-      }
-      p5Object.redraw();
-    });
+  socket.on('otherUsers', function(pauseData) {
+    game.isPause = pauseData.data;
+    p5Object.redraw();
+  });
 
 }
 
-function draw_tetrisGame(){
-  draw_nextBlock(game.nextBlock,game.startX,0);
-  draw_holdBlock(game.holdBlock,game.startX,0);
-  draw_tetrisBoard(game.board,game.startX,0);
-  draw_score(game.score,game.startX,0);
-  draw_state(game.isPause,game.isGameOver,game.startX,0);
+function draw_tetrisGame() {
+  if (game.score == undefined) {
+    console.log(game);
+    return;
+  }
+  draw_nextBlock(game.nextBlock, game.startX, 0);
+  draw_holdBlock(game.holdBlock, game.startX, 0);
+  draw_tetrisBoard(game.board, game.startX, 0);
+  draw_score(game.score, game.startX, 0);
+  draw_state(game.isPause, game.isGameOver, game.startX, 0);
 }
 
-function draw_tetrisBoard(board,Sx,Sy){
-  draw_block(board,BOARD_HEIGHT,BOARD_WIDTH,0+Sx,170+Sy);
+function draw_tetrisBoard(board, Sx, Sy) {
+  draw_block(board, global.BOARD_HEIGHT, global.BOARD_WIDTH, 0 + Sx, 170 + Sy);
 }
 
-function draw_block(board, rowNum, colNum ,Sx,Sy){
-   for(var i = 0; i < rowNum; i++){
-    for(var j = 0; j < colNum; j++){
+function draw_block(board, rowNum, colNum, Sx, Sy) {
+  for (var i = 0; i < rowNum; i++) {
+    for (var j = 0; j < colNum; j++) {
       /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
       p5Object.push();
-      p5Object.translate(Sx + j*BLOCK_WIDTH ,Sy + i*BLOCK_HEIGHT);
+      p5Object.translate(Sx + j * global.BLOCK_WIDTH, Sy + i * global.BLOCK_HEIGHT);
       var colorType = '#000000';
       switch (board[i][j]) {
         case 11:
@@ -368,115 +366,127 @@ function draw_block(board, rowNum, colNum ,Sx,Sy){
           colorType = '#a12a5e';
           break;
       }
-      p5Object.fill(p5Object.color(colorType));/*black*/
-      p5Object.rect(0,0,BLOCK_WIDTH,BLOCK_HEIGHT);
+      p5Object.fill(p5Object.color(colorType)); /*black*/
+      p5Object.rect(0, 0, global.BLOCK_WIDTH, global.BLOCK_HEIGHT);
       p5Object.pop();
     }
   }
 }
 
-function draw_nextBlock(board,Sx,Sy){
+function draw_nextBlock(board, Sx, Sy) {
   p5Object.push();
-  p5Object.translate(0 + Sx,0 + Sy);
+  p5Object.translate(0 + Sx, 0 + Sy);
   p5Object.text("Next Block", 0, 20);
   p5Object.pop();
-  draw_block(board,4,4,0+Sx,30+Sy);
+  draw_block(board, 4, 4, 0 + Sx, 30 + Sy);
 }
 
-function draw_holdBlock(board,Sx,Sy){
+function draw_holdBlock(board, Sx, Sy) {
   p5Object.push();
-  p5Object.translate(180+Sx,0+Sy);
+  p5Object.translate(180 + Sx, 0 + Sy);
   p5Object.text("Hold Block", 0, 20);
   p5Object.pop();
-  draw_block(board,4,4,180+Sx,30+Sy);
+  draw_block(board, 4, 4, 180 + Sx, 30 + Sy);
 
 }
 
-function draw_score(score,Sx,Sy){
+function draw_score(score, Sx, Sy) {
   var str = "SCORE";
   p5Object.push();
-  p5Object.translate(0+Sx,790+Sy);
+  p5Object.translate(0 + Sx, 790 + Sy);
   p5Object.rect(0, 0, 120, 50);
   p5Object.text(str, 10, 20);
-  p5Object.text(score||0, 10, 45);
+  p5Object.text(score || 0, 10, 45);
   p5Object.pop();
 }
 
-function draw_state(isPaused, isGameOver,Sx,Sy){
+function draw_state(isPaused, isGameOver, Sx, Sy) {
   p5Object.push();
-  p5Object.translate(180+Sx,790+Sy);
+  p5Object.translate(180 + Sx, 790 + Sy);
   p5Object.rect(0, 0, 120, 50);
 
-  if(isGameOver){
+  if (isGameOver) {
     p5Object.text("GAME OVER", 10, 35);
     p5Object.pop();
     return;
   }
 
-  if(isPaused){
+  if (isPaused) {
     p5Object.text("PAUSED", 25, 35);
   }
   p5Object.pop();
 }
 
 var p5sketch = function(p) {
-    p5Object = p;
-    p.setup = function() {
-        p.createCanvas(1500, 850);
-        p.textSize(20);
-        p.noLoop();
-        tetris_run();
+  p5Object = p;
+  p.setup = function() {
+    p.createCanvas(1500, 850);
+    p.textSize(20);
+    p.noLoop();
+    tetris_run();
+  }
+  p.draw = function() {
+    p.clear();
+    draw_tetrisGame();
+  }
+  p.keyPressed = function() {
+    var mustpause = false;
+    if (game.isPause) {
+      if (p.keyCode === p.ENTER) {
+        socket.emit('Enter_Key');
+      } else if (p.key === 'R') {
+        socket.emit('R_Key');
       }
-    p.draw = function(){
-      p.clear();
-      draw_tetrisGame();
-    }
-    p.keyPressed = function(){
-      var mustpause = false;
-      if(game.isPause){
-        if(p.keyCode === p.ENTER){
-          socket.emit('Enter_Key');
-        }else if(p.key === 'R'){
-          socket.emit('R_Key');
+    } else {
+      if (p.keyCode === p.ENTER) {
+        mustpause = true;
+      } else if (p.key === 'R') {
+        socket.emit('R_Key');
+      } else if (p.key === 'A') {
+        socket.emit('A_Key');
+      } else if (p.key === 'S') {
+        socket.emit('S_Key');
+      } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
+        socket.emit('Space_Key');
+      } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
+        // hold 할 수 없으면 전송하지 않는다.
+        if (game.holdable) {
+          socket.emit('Shift_Key');
         }
-      }else{
-        if(p.keyCode === p.ENTER){
-          mustpause = true;
-        }else if(p.key === 'R'){
-          socket.emit('R_Key');
-        }else if(p.key === 'A'){
-          socket.emit('A_Key');
-        }else if(p.key === 'S'){
-          socket.emit('S_Key');
-        }else if(p.keyCode === KEY_SPACE){/*space bar*/
-          socket.emit('Space_Key');
-        }else if(p.keyCode === KEY_SHIFT){/*shift*/
-          // hold 할 수 없으면 전송하지 않는다.
-          if(game.holdable){
-            socket.emit('Shift_Key');
-          }
-        }else if(p.keyCode === p.LEFT_ARROW){
-          socket.emit('Left_Key');
-        }else if(p.keyCode === p.RIGHT_ARROW){
-          socket.emit('Right_Key');
-        }else if(p.keyCode === p.DOWN_ARROW){
-          socket.emit('Down_Key');
-        }else if(p.keyCode === p.UP_ARROW){
-          socket.emit('Up_Key');
-        }
+      } else if (p.keyCode === p.LEFT_ARROW) {
+        socket.emit('Left_Key');
+      } else if (p.keyCode === p.RIGHT_ARROW) {
+        socket.emit('Right_Key');
+      } else if (p.keyCode === p.DOWN_ARROW) {
+        socket.emit('Down_Key');
+      } else if (p.keyCode === p.UP_ARROW) {
+        socket.emit('Up_Key');
+      }
 
-        if (mustpause) {
-          socket.emit('Enter_Key');
-        }
-        p.redraw();
+      if (mustpause) {
+        socket.emit('Enter_Key');
       }
+      p.redraw();
     }
   }
+}
 
-  new p5(p5sketch, 'myp5sketch');
+new p5(p5sketch, 'myp5sketch');
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"socket.io-client":35}],4:[function(require,module,exports){
+},{"./global":4,"socket.io-client":36}],4:[function(require,module,exports){
+module.exports = {
+    host: "127.0.0.1",
+    port: 3000,
+    BOARD_WIDTH: 10,
+    BOARD_HEIGHT: 20,
+    BLOCK_WIDTH: 30,
+    BLOCK_HEIGHT: 30,
+    FALLING_TIME: 400,
+    KEY_SPACE : 32,
+    KEY_SHIFT : 16
+	};
+
+},{}],5:[function(require,module,exports){
 module.exports = after
 
 function after(count, callback, err_cb) {
@@ -506,7 +516,7 @@ function after(count, callback, err_cb) {
 
 function noop() {}
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 /**
  * An abstraction for slicing an arraybuffer even when
  * ArrayBuffer.prototype.slice is not supported
@@ -537,7 +547,7 @@ module.exports = function(arraybuffer, start, end) {
   return result.buffer;
 };
 
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 
 /**
  * Expose `Backoff`.
@@ -624,7 +634,7 @@ Backoff.prototype.setJitter = function(jitter){
 };
 
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 /*
  * base64-arraybuffer
  * https://github.com/niklasvh/base64-arraybuffer
@@ -693,7 +703,7 @@ Backoff.prototype.setJitter = function(jitter){
   };
 })();
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 (function (global){
 /**
  * Create a blob builder even when vendor prefixes exist
@@ -793,7 +803,7 @@ module.exports = (function() {
 })();
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 /**
  * Slice reference.
  */
@@ -818,7 +828,7 @@ module.exports = function(obj, fn){
   }
 };
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 
 /**
  * Expose `Emitter`.
@@ -983,7 +993,7 @@ Emitter.prototype.hasListeners = function(event){
   return !! this.listeners(event).length;
 };
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 
 module.exports = function(a, b){
   var fn = function(){};
@@ -991,7 +1001,7 @@ module.exports = function(a, b){
   a.prototype = new fn;
   a.prototype.constructor = a;
 };
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -1180,7 +1190,7 @@ function localstorage() {
 }
 
 }).call(this,require('_process'))
-},{"./debug":13,"_process":2}],13:[function(require,module,exports){
+},{"./debug":14,"_process":2}],14:[function(require,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -1384,11 +1394,11 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":31}],14:[function(require,module,exports){
+},{"ms":32}],15:[function(require,module,exports){
 
 module.exports = require('./lib/index');
 
-},{"./lib/index":15}],15:[function(require,module,exports){
+},{"./lib/index":16}],16:[function(require,module,exports){
 
 module.exports = require('./socket');
 
@@ -1400,7 +1410,7 @@ module.exports = require('./socket');
  */
 module.exports.parser = require('engine.io-parser');
 
-},{"./socket":16,"engine.io-parser":24}],16:[function(require,module,exports){
+},{"./socket":17,"engine.io-parser":25}],17:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -2148,7 +2158,7 @@ Socket.prototype.filterUpgrades = function (upgrades) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./transport":17,"./transports/index":18,"component-emitter":10,"debug":12,"engine.io-parser":24,"indexof":29,"parsejson":32,"parseqs":33,"parseuri":34}],17:[function(require,module,exports){
+},{"./transport":18,"./transports/index":19,"component-emitter":11,"debug":13,"engine.io-parser":25,"indexof":30,"parsejson":33,"parseqs":34,"parseuri":35}],18:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -2307,7 +2317,7 @@ Transport.prototype.onClose = function () {
   this.emit('close');
 };
 
-},{"component-emitter":10,"engine.io-parser":24}],18:[function(require,module,exports){
+},{"component-emitter":11,"engine.io-parser":25}],19:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies
@@ -2364,7 +2374,7 @@ function polling (opts) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling-jsonp":19,"./polling-xhr":20,"./websocket":22,"xmlhttprequest-ssl":23}],19:[function(require,module,exports){
+},{"./polling-jsonp":20,"./polling-xhr":21,"./websocket":23,"xmlhttprequest-ssl":24}],20:[function(require,module,exports){
 (function (global){
 
 /**
@@ -2599,7 +2609,7 @@ JSONPPolling.prototype.doWrite = function (data, fn) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling":21,"component-inherit":11}],20:[function(require,module,exports){
+},{"./polling":22,"component-inherit":12}],21:[function(require,module,exports){
 (function (global){
 /**
  * Module requirements.
@@ -3016,7 +3026,7 @@ function unloadHandler () {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling":21,"component-emitter":10,"component-inherit":11,"debug":12,"xmlhttprequest-ssl":23}],21:[function(require,module,exports){
+},{"./polling":22,"component-emitter":11,"component-inherit":12,"debug":13,"xmlhttprequest-ssl":24}],22:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -3263,7 +3273,7 @@ Polling.prototype.uri = function () {
   return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
 };
 
-},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":33,"xmlhttprequest-ssl":23,"yeast":44}],22:[function(require,module,exports){
+},{"../transport":18,"component-inherit":12,"debug":13,"engine.io-parser":25,"parseqs":34,"xmlhttprequest-ssl":24,"yeast":45}],23:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -3553,7 +3563,7 @@ WS.prototype.check = function () {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":33,"ws":1,"yeast":44}],23:[function(require,module,exports){
+},{"../transport":18,"component-inherit":12,"debug":13,"engine.io-parser":25,"parseqs":34,"ws":1,"yeast":45}],24:[function(require,module,exports){
 (function (global){
 // browser shim for xmlhttprequest module
 
@@ -3594,7 +3604,7 @@ module.exports = function (opts) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"has-cors":28}],24:[function(require,module,exports){
+},{"has-cors":29}],25:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -4204,7 +4214,7 @@ exports.decodePayloadAsBinary = function (data, binaryType, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./keys":25,"./utf8":26,"after":4,"arraybuffer.slice":5,"base64-arraybuffer":7,"blob":8,"has-binary2":27}],25:[function(require,module,exports){
+},{"./keys":26,"./utf8":27,"after":5,"arraybuffer.slice":6,"base64-arraybuffer":8,"blob":9,"has-binary2":28}],26:[function(require,module,exports){
 
 /**
  * Gets the keys for an object.
@@ -4225,7 +4235,7 @@ module.exports = Object.keys || function keys (obj){
   return arr;
 };
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 (function (global){
 /*! https://mths.be/utf8js v2.1.2 by @mathias */
 ;(function(root) {
@@ -4484,7 +4494,7 @@ module.exports = Object.keys || function keys (obj){
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 (function (global){
 /* global Blob File */
 
@@ -4550,7 +4560,7 @@ function hasBinary (obj) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"isarray":30}],28:[function(require,module,exports){
+},{"isarray":31}],29:[function(require,module,exports){
 
 /**
  * Module exports.
@@ -4569,7 +4579,7 @@ try {
   module.exports = false;
 }
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 
 var indexOf = [].indexOf;
 
@@ -4580,14 +4590,14 @@ module.exports = function(arr, obj){
   }
   return -1;
 };
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 /**
  * Helpers.
  */
@@ -4741,7 +4751,7 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 (function (global){
 /**
  * JSON parse.
@@ -4776,7 +4786,7 @@ module.exports = function parsejson(data) {
   }
 };
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /**
  * Compiles a querystring
  * Returns string representation of the object
@@ -4815,7 +4825,7 @@ exports.decode = function(qs){
   return qry;
 };
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 /**
  * Parses an URI
  *
@@ -4856,7 +4866,7 @@ module.exports = function parseuri(str) {
     return uri;
 };
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -4952,7 +4962,7 @@ exports.connect = lookup;
 exports.Manager = require('./manager');
 exports.Socket = require('./socket');
 
-},{"./manager":36,"./socket":38,"./url":39,"debug":12,"socket.io-parser":41}],36:[function(require,module,exports){
+},{"./manager":37,"./socket":39,"./url":40,"debug":13,"socket.io-parser":42}],37:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5527,7 +5537,7 @@ Manager.prototype.onreconnect = function () {
   this.emitAll('reconnect', attempt);
 };
 
-},{"./on":37,"./socket":38,"backo2":6,"component-bind":9,"component-emitter":10,"debug":12,"engine.io-client":14,"indexof":29,"socket.io-parser":41}],37:[function(require,module,exports){
+},{"./on":38,"./socket":39,"backo2":7,"component-bind":10,"component-emitter":11,"debug":13,"engine.io-client":15,"indexof":30,"socket.io-parser":42}],38:[function(require,module,exports){
 
 /**
  * Module exports.
@@ -5553,7 +5563,7 @@ function on (obj, ev, fn) {
   };
 }
 
-},{}],38:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5973,7 +5983,7 @@ Socket.prototype.compress = function (compress) {
   return this;
 };
 
-},{"./on":37,"component-bind":9,"component-emitter":10,"debug":12,"parseqs":33,"socket.io-parser":41,"to-array":43}],39:[function(require,module,exports){
+},{"./on":38,"component-bind":10,"component-emitter":11,"debug":13,"parseqs":34,"socket.io-parser":42,"to-array":44}],40:[function(require,module,exports){
 (function (global){
 
 /**
@@ -6052,7 +6062,7 @@ function url (uri, loc) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"debug":12,"parseuri":34}],40:[function(require,module,exports){
+},{"debug":13,"parseuri":35}],41:[function(require,module,exports){
 (function (global){
 /*global Blob,File*/
 
@@ -6197,7 +6207,7 @@ exports.removeBlobs = function(data, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./is-buffer":42,"isarray":30}],41:[function(require,module,exports){
+},{"./is-buffer":43,"isarray":31}],42:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6599,7 +6609,7 @@ function error() {
   };
 }
 
-},{"./binary":40,"./is-buffer":42,"component-emitter":10,"debug":12,"has-binary2":27}],42:[function(require,module,exports){
+},{"./binary":41,"./is-buffer":43,"component-emitter":11,"debug":13,"has-binary2":28}],43:[function(require,module,exports){
 (function (global){
 
 module.exports = isBuf;
@@ -6616,7 +6626,7 @@ function isBuf(obj) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],43:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 module.exports = toArray
 
 function toArray(list, index) {
@@ -6631,7 +6641,7 @@ function toArray(list, index) {
     return array
 }
 
-},{}],44:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 'use strict';
 
 var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
