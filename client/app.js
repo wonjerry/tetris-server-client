@@ -105,22 +105,27 @@ function setupSocket(socket) {
     game.score = playerSettings.score;
     game.X = playerSettings.X;
     game.Y = playerSettings.Y;
+
     game.currentBlock = [];
     for (var i = 0; i < 4; i++) {
       game.currentBlock[i] = playerSettings.currentBlock[i].slice();
     }
+
     game.nextBlock = [];
     for (var i = 0; i < 4; i++) {
       game.nextBlock[i] = playerSettings.nextBlock[i].slice();
     }
+
     game.holdBlock = [];
     for (var i = 0; i < 4; i++) {
       game.holdBlock[i] = playerSettings.holdBlock[i].slice();
     }
+
     game.board = [];
     for (var i = 0; i < global.BOARD_HEIGHT; i++) {
       game.board[i] = playerSettings.board[i].slice();
     }
+
     p5Object.redraw();
   });
 
@@ -241,45 +246,46 @@ var p5sketch = function(p) {
     draw_tetrisGame();
   }
   p.keyPressed = function() {
-    var mustpause = false;
+    var str = '';
+
     if (game.isPause) {
       if (p.keyCode === p.ENTER) {
-        socket.emit('Enter_Key');
+        str = 'Enter_Key';
       } else if (p.key === 'R') {
-        socket.emit('R_Key');
-      }
+        str = 'R_Key';
+      }else str = 'none';
     } else {
       if (p.keyCode === p.ENTER) {
-        mustpause = true;
+        str = 'Enter_Key';
       } else if (p.key === 'R') {
-        socket.emit('R_Key');
+        str = 'R_Key';
       } else if (p.key === 'A') {
-        socket.emit('A_Key');
+        str = 'A_Key';
       } else if (p.key === 'S') {
-        socket.emit('S_Key');
+        str = 'S_Key';
       } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
-        socket.emit('Space_Key');
+        str = 'Space_Key';
       } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
         // hold 할 수 없으면 전송하지 않는다.
         if (game.holdable) {
-          socket.emit('Shift_Key');
+          str = 'Shift_Key';
         }
       } else if (p.keyCode === p.LEFT_ARROW) {
-        socket.emit('Left_Key');
+        str = 'Left_Key';
       } else if (p.keyCode === p.RIGHT_ARROW) {
-        socket.emit('Right_Key');
+        str = 'Right_Key';
       } else if (p.keyCode === p.DOWN_ARROW) {
-        socket.emit('Down_Key');
+        str =  'Down_Key';
       } else if (p.keyCode === p.UP_ARROW) {
-        socket.emit('Up_Key');
-      }
-
-      if (mustpause) {
-        socket.emit('Enter_Key');
-      }
-      p.redraw();
+        str = 'Up_Key';
+      }else str = 'none';
     }
+
+    if(str !== 'none') socket.emit('Key_Pressed',{data : str});
+    p.redraw();
   }
+
+  
 }
 
 new p5(p5sketch, 'myp5sketch');

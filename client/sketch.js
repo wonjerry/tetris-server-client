@@ -430,7 +430,53 @@ var p5sketch = function(p) {
     draw_tetrisGame();
   }
   p.keyPressed = function() {
-    var mustpause = false;
+    var str = '';
+    if (game.isPause) {
+      if (p.keyCode === p.ENTER) {
+        str = 'Enter_Key';
+      } else if (p.key === 'R') {
+        str = 'R_Key';
+      }else str = 'none';
+    } else {
+      if (p.keyCode === p.ENTER) {
+        str = 'Enter_Key';
+      } else if (p.key === 'R') {
+        str = 'R_Key';
+      } else if (p.key === 'A') {
+        str = 'A_Key';
+      } else if (p.key === 'S') {
+        str = 'S_Key';
+      } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
+        str = 'Space_Key';
+      } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
+        // hold 할 수 없으면 전송하지 않는다.
+        if (game.holdable) {
+          str = 'Shift_Key';
+        }
+      } else if (p.keyCode === p.LEFT_ARROW) {
+        str = 'Left_Key';
+      } else if (p.keyCode === p.RIGHT_ARROW) {
+        str = 'Right_Key';
+      } else if (p.keyCode === p.DOWN_ARROW) {
+        str =  'Down_Key';
+      } else if (p.keyCode === p.UP_ARROW) {
+        str = 'Up_Key';
+      }else str = 'none';
+    }
+
+    if(str !== 'none') socket.emit('Key_Pressed',{data : str});
+    p.redraw();
+  }
+
+  /*
+  p.keyReleased = function() {
+
+    if (p.keyCode === p.UP_ARROW) {
+      socket.emit('Up_KeyReleased',{data : false});
+    }
+
+    p.redraw();
+
     if (game.isPause) {
       if (p.keyCode === p.ENTER) {
         socket.emit('Enter_Key');
@@ -439,16 +485,16 @@ var p5sketch = function(p) {
       }
     } else {
       if (p.keyCode === p.ENTER) {
-        mustpause = true;
+        socket.emit('Enter_Key');
       } else if (p.key === 'R') {
         socket.emit('R_Key');
       } else if (p.key === 'A') {
         socket.emit('A_Key');
       } else if (p.key === 'S') {
         socket.emit('S_Key');
-      } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
+      } else if (p.keyCode === global.KEY_SPACE) {
         socket.emit('Space_Key');
-      } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
+      } else if (p.keyCode === global.KEY_SHIFT) {
         // hold 할 수 없으면 전송하지 않는다.
         if (game.holdable) {
           socket.emit('Shift_Key');
@@ -460,15 +506,14 @@ var p5sketch = function(p) {
       } else if (p.keyCode === p.DOWN_ARROW) {
         socket.emit('Down_Key');
       } else if (p.keyCode === p.UP_ARROW) {
-        socket.emit('Up_Key');
+        socket.emit('Up_Key',{data : false});
       }
 
-      if (mustpause) {
-        socket.emit('Enter_Key');
-      }
       p.redraw();
+
     }
   }
+  */
 }
 
 new p5(p5sketch, 'myp5sketch');

@@ -16,11 +16,11 @@ app.use(express.static(__dirname + '/../client'));
 
 /*클라이언트에서 접속이 이루어지고 서버로 요청이 들어오면 받아서 새로운 플레이어를 만들어 준다 그리고 클라이언트에 보내준다..*/
 io.on('connection', function(socket) {
-  if(socket.handshake.query.type ==='tetris') setupTetrisSocket(socket);
+  if (socket.handshake.query.type === 'tetris') setupTetrisSocket(socket);
 
 });
 
-function setupTetrisSocket(socket){
+function setupTetrisSocket(socket) {
   console.log('A user connected!');
   /*클라이언트에서 io.on({query:"type=" + type}) 이라고 어떤 토큰을 주면 서버에서서는 소켓을 통해
   socket.handshake.query.type으로 받을 수 있나보다.*/
@@ -90,92 +90,106 @@ function setupTetrisSocket(socket){
     });
   });
 
+  var Key = {
+    _pressed: {},
+
+    LEFT: 37,
+    UP: 38,
+    RIGHT: 39,
+    DOWN: 40,
+
+    isDown: function(keyCode) {
+      return this._pressed[keyCode];
+    },
+
+    onKeydown: function(keyCode) {
+      this._pressed[keyCode] = true;
+    },
+
+    onKeyup: function(keyCode) {
+      delete this._pressed[keyCode];
+    }
+  };
+
   // 나는 어떤 키보드가 눌렸을 경우는 on 하고 있다가 눌리면 그것에 대한 응답 및 처리를 즉각적으로 해 주어야 한다.
   // 그럼 이런 방식으로 key 값에 대한 응답 내용을 작성하면 될 듯 하다.
-  socket.on('Up_Key', function() {
-    if (currentPlayer.rotateRight()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
 
-  socket.on('Down_Key', function() {
-    if (currentPlayer.steerDown()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
+  socket.on('Key_Pressed', function(keys) {
+    switch (keys.data) {
+      case 'Up_Key':
+        if (currentPlayer.rotateRight()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'Down_Key':
+        if (currentPlayer.steerDown()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'Left_Key':
+        if (currentPlayer.steerLeft()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'Right_Key':
+        if (currentPlayer.steerRight()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'A_Key':
+        if (currentPlayer.rotateLeft()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'S_Key':
+        if (currentPlayer.rotateRight()) {
+          socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        }
+        break;
+      case 'Shift_Key':
+        currentPlayer.hold();
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        break;
+      case 'R_Key':
+        clearInterval(currentPlayer.getIntervalHandler());
+        currentPlayer = new TetrisGame();
+        currentPlayer.setIntervalHandler(setInterval(
+          function() {
+            if (currentPlayer.go()) {
+              sockets[currentPlayer.getId()].emit('serverTellPlayerMove', currentPlayer.getGameData());
+            } else {
+              clearInterval(currentPlayer.getIntervalHandler());
+            }
+          },
+          global.FALLING_TIME
+        ));
+        break;
+      case 'Space_Key':
+        currentPlayer.letFall();
+        socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
+        break;
+      case 'Enter_Key':
+        if (currentPlayer.getisPause()) {
+          currentPlayer.setIsPause(false);
+          currentPlayer.setIntervalHandler(setInterval(
+            function() {
+              if (currentPlayer.go()) {
+                sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
+              } else {
+                clearInterval(currentPlayer.getIntervalHandler());
+              }
+            },
+            global.FALLING_TIME
+          ));
 
-  socket.on('Left_Key', function() {
-    if (currentPlayer.steerLeft()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
-
-  socket.on('Right_Key', function() {
-    if (currentPlayer.steerRight()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
-
-  socket.on('A_Key', function() {
-    if (currentPlayer.rotateLeft()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
-
-  socket.on('S_Key', function() {
-    if (currentPlayer.rotateRight()) {
-      socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-    }
-  });
-
-  socket.on('R_Key', function() {
-    clearInterval(currentPlayer.getIntervalHandler());
-    currentPlayer = new TetrisGame();
-    currentPlayer.setIntervalHandler(setInterval(
-      function() {
-        if (currentPlayer.go()) {
-          sockets[currentPlayer.getId()].emit('serverTellPlayerMove', currentPlayer.getGameData());
         } else {
           clearInterval(currentPlayer.getIntervalHandler());
+          currentPlayer.setIsPause(true);
+          socket.emit('UpdateIsPause', {
+            data: currentPlayer.getisPause()
+          });
         }
-      },
-      global.FALLING_TIME
-    ));
-  });
-
-  socket.on('Space_Key', function() {
-    currentPlayer.letFall();
-    socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-  });
-
-  socket.on('Shift_Key', function() {
-    /*이건 holdable 여부로 안나누는 이유는 클라이언트에서 holdable에 따라서 전송을 막아야 트래픽을 아낄 수 있기 때문이다.
-    서버에서 판정하면 클라이언트에서는 계속 shift 키를 누를 때 마다 요청을 보낼 것 이다.*/
-    currentPlayer.hold();
-    socket.emit('serverTellPlayerMove', currentPlayer.getGameData());
-  });
-
-  socket.on('Enter_Key', function() {
-
-    if (currentPlayer.getisPause()) {
-      currentPlayer.setIsPause(false);
-      currentPlayer.setIntervalHandler(setInterval(
-        function() {
-          if (currentPlayer.go()) {
-            sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
-          } else {
-            clearInterval(currentPlayer.getIntervalHandler());
-          }
-        },
-        global.FALLING_TIME
-      ));
-
-    } else {
-      clearInterval(currentPlayer.getIntervalHandler());
-      currentPlayer.setIsPause(true);
-      socket.emit('UpdateIsPause', {
-        data: currentPlayer.getisPause()
-      });
+        break;
     }
 
   });

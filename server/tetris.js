@@ -285,6 +285,9 @@ TetrisGame.prototype.hold = function() {
 
   }
 
+  this.block.X = 3;
+  this.block.Y = 0;
+
 }
 
 TetrisGame.prototype.getIntervalHandler = function() {
