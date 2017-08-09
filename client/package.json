@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "events": "^1.1.1",
     "express": "^4.15.3",
+    "inherits": "^2.0.3",
     "socket.io": "^2.0.3",
     "uniq": "^1.0.1"
   }

@@ -6,8 +6,6 @@ var util = require('./util');
 var global = require('./../client/global');
 var TetrisGame = require('./tetris');
 
-
-/*game 객체와 일정시간 반복을 위한 handler 객체를 전역으로 정의하였다.*/
 var users = [];
 var sockets = {};
 
@@ -152,11 +150,17 @@ function setupTetrisSocket(socket) {
         break;
       case 'R_Key':
         clearInterval(currentPlayer.getIntervalHandler());
-        currentPlayer = new TetrisGame();
+
+        var newGame = new TetrisGame();
+        newGame.setId(currentPlayer.getId());
+        newGame.setStartX(currentPlayer.getStartX());
+
+        currentPlayer = newGame;
+
         currentPlayer.setIntervalHandler(setInterval(
           function() {
             if (currentPlayer.go()) {
-              sockets[currentPlayer.getId()].emit('serverTellPlayerMove', currentPlayer.getGameData());
+              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
             } else {
               clearInterval(currentPlayer.getIntervalHandler());
             }
