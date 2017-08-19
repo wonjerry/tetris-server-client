@@ -36,8 +36,8 @@ function setupTetrisSocket(socket) {
     /*users 객체에 동일 아이디의 player가 있는지 확인 후 있으면 users 배열에서 원래 것을 뺀다.*/
     if (util.findIndex(users, currentPlayer.getId()) > -1)
       users.splice(util.findIndex(users, currentPlayer.getId()), 1);
-    /*클라이언트에게 game 객체의 데이터만 모은 객체를 전송 해 준다.*/
 
+    /*클라이언트에게 game 객체의 데이터만 모은 객체를 전송 해 준다.*/
     socket.emit('welcome', currentPlayer.getGameData());
     console.log('[INFO] User respawned!');
   });
@@ -65,11 +65,19 @@ function setupTetrisSocket(socket) {
     // 근데 어쨌든 이것도 사람이 많아질수록 내부적으로 interval이 돌기 때문에 부하가 커질 것 같다.
     currentPlayer.setIntervalHandler(setInterval(
       function() {
+        // 지금은 게임이 진행 될 때만 그려주지만 나중에는 그냥 그릴 수 있게 하기
         if (currentPlayer.go()) {
-          sockets[currentPlayer.getId()].emit('serverTellPlayerMove', currentPlayer.getGameData());
+          var userGameDatas = [];
+
+          for(var i=0; i<users.length; i++){
+            userGameDatas.push(users[i].getGameData());
+          }
+
+          sockets[currentPlayer.getId()].emit('users', userGameDatas);
+
         } else {
-          //게임 오버 되었을 경우를 처리 해줘야함.
-          // 유저에게 어떤 시그널을 보내서 처리하게 한다든지 해야할듯
+          // 음 서버에서 이 함수 외부에서 모든 유저가 Gameover인지 체크해서 true이면 clearInterval 하면 될 것 같다.
+          // 일단은 이렇게
           clearInterval(currentPlayer.getIntervalHandler());
         }
       },
@@ -154,13 +162,19 @@ function setupTetrisSocket(socket) {
         var newGame = new TetrisGame();
         newGame.setId(currentPlayer.getId());
         newGame.setStartX(currentPlayer.getStartX());
-
+        
         currentPlayer = newGame;
 
         currentPlayer.setIntervalHandler(setInterval(
           function() {
             if (currentPlayer.go()) {
-              sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
+              var userGameDatas = [];
+
+              for(var i=0; i<users.length; i++){
+                userGameDatas.push(users[i].getGameData());
+              }
+
+              sockets[currentPlayer.getId()].emit('users', userGameDatas);
             } else {
               clearInterval(currentPlayer.getIntervalHandler());
             }
@@ -178,7 +192,13 @@ function setupTetrisSocket(socket) {
           currentPlayer.setIntervalHandler(setInterval(
             function() {
               if (currentPlayer.go()) {
-                sockets[currentPlayer.id].emit('serverTellPlayerMove', currentPlayer.getGameData());
+                var userGameDatas = [];
+
+                for(var i=0; i<users.length; i++){
+                  userGameDatas.push(users[i].getGameData());
+                }
+
+                sockets[currentPlayer.getId()].emit('users', userGameDatas);
               } else {
                 clearInterval(currentPlayer.getIntervalHandler());
               }

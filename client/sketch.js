@@ -505,7 +505,7 @@ window.onload = function() {
     setupSocket(socket);
   }
   socket.emit('respawn');
-}
+};
 
 // socket stuff.
 function setupSocket(socket) {
@@ -547,11 +547,11 @@ function setupSocket(socket) {
 
   socket.on('serverTellPlayerMove', function(playerSettings) {
     canvas.emit('redraw',playerSettings) ;
+    //canvas.emit('drawOtherUsers',playerSettings) ;
   });
 
-  socket.on('otherUsers', function(pauseData) {
-    //game.isPause = pauseData.data;
-    //p5Object.redraw();
+  socket.on('users', function(users) {
+    canvas.emit('drawUsers',users) ;
   });
 
 }
@@ -560,40 +560,20 @@ function setupSocket(socket) {
 var global = require('./global');
 var inherits = require('inherits');
 var EventEmitter = require('events').EventEmitter;
-var p5Object, drawObject;
+var p5Object, drawObject ,games = [];
 
 inherits(DrawTetrisGame, EventEmitter);
 
 function DrawTetrisGame() {
   if (!(this instanceof DrawTetrisGame)) return new DrawTetrisGame();
   this.game = {};
-
   this.on('redraw', function(inputGame) {
-
-    this.game.startX = inputGame.startX;
-    this.game.isGameOver = inputGame.isGameOver;
-    this.game.isPause = inputGame.isPause;
-    this.game.holdable = inputGame.holdable;
-    this.game.score = inputGame.score;
-    this.game.X = inputGame.X;
-    this.game.Y = inputGame.Y;
-    this.game.currentBlock = [];
-    for (var i = 0; i < 4; i++) {
-      this.game.currentBlock[i] = inputGame.currentBlock[i].slice();
+    for(var i= 0; i < games.length; i++){
+      if(games[i].id === inputGame.id){
+        games[i] = inputGame;
+      }
     }
-    this.game.nextBlock = [];
-    for (var i = 0; i < 4; i++) {
-      this.game.nextBlock[i] = inputGame.nextBlock[i].slice();
-    }
-    this.game.holdBlock = [];
-    for (var i = 0; i < 4; i++) {
-      this.game.holdBlock[i] = inputGame.holdBlock[i].slice();
-    }
-    this.game.board = [];
-    for (var i = 0; i < global.BOARD_HEIGHT; i++) {
-      this.game.board[i] = inputGame.board[i].slice();
-    }
-
+    this.game = inputGame;
     p5Object.redraw();
   });
 
@@ -602,14 +582,24 @@ function DrawTetrisGame() {
     p5Object.redraw();
   });
 
+  this.on('drawUsers', function(users) {
+    games = users;
+    p5Object.redraw();
+  });
+
 }
 
+
 DrawTetrisGame.prototype.drawGame = function() {
-  this.drawNextBlock(this.game.nextBlock, this.game.startX, 0);
-  this.drawHoldBlock(this.game.holdBlock, this.game.startX, 0);
-  this.drawTetrisBoard(this.game.board, this.game.startX, 0);
-  this.drawScore(this.game.score, this.game.startX, 0);
-  this.drawState(this.game.isPause, this.game.isGameOver, this.game.startX, 0);
+  var length = games.length;
+  for(var i=0; i<length; i++){
+    this.drawNextBlock(games[i].nextBlock, games[i].startX, 0);
+    this.drawHoldBlock(games[i].holdBlock, games[i].startX, 0);
+    this.drawTetrisBoard(games[i].board, games[i].startX, 0);
+    this.drawScore(games[i].score, games[i].startX, 0);
+    this.drawState(games[i].isPause, games[i].isGameOver, games[i].startX, 0);
+  }
+
 }
 
 DrawTetrisGame.prototype.drawTetrisBoard = function(board, Sx, Sy) {
@@ -763,7 +753,7 @@ module.exports = drawObject;
 
 },{"./global":6,"events":2,"inherits":33}],6:[function(require,module,exports){
 module.exports = {
-    host: "127.0.0.1",
+    host: "0.0.0.0",
     port: 3000,
     BOARD_WIDTH: 10,
     BOARD_HEIGHT: 20,

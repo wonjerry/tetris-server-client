@@ -12,7 +12,7 @@ window.onload = function() {
     setupSocket(socket);
   }
   socket.emit('respawn');
-}
+};
 
 // socket stuff.
 function setupSocket(socket) {
@@ -54,11 +54,11 @@ function setupSocket(socket) {
 
   socket.on('serverTellPlayerMove', function(playerSettings) {
     canvas.emit('redraw',playerSettings) ;
+    //canvas.emit('drawOtherUsers',playerSettings) ;
   });
 
-  socket.on('otherUsers', function(pauseData) {
-    //game.isPause = pauseData.data;
-    //p5Object.redraw();
+  socket.on('users', function(users) {
+    canvas.emit('drawUsers',users) ;
   });
 
 }
