@@ -6844,7 +6844,7 @@ function tryParse(p, str) {
   } catch(e){
     return error();
   }
-  return p; 
+  return p;
 }
 
 /**
