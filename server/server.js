@@ -162,7 +162,7 @@ function setupTetrisSocket(socket) {
         var newGame = new TetrisGame();
         newGame.setId(currentPlayer.getId());
         newGame.setStartX(currentPlayer.getStartX());
-        
+
         currentPlayer = newGame;
 
         currentPlayer.setIntervalHandler(setInterval(
@@ -218,8 +218,13 @@ function setupTetrisSocket(socket) {
 
   });
 }
-
+/*
 //아이피 설정을 어떻게 해야할지 모르겠다.
 http.listen(global.port, global.host, function() {
+  console.log('[DEBUG] Listening on 127.0.0.1 : 3000');
+});
+*/
+
+http.listen(global.port, function() {
   console.log('[DEBUG] Listening on 127.0.0.1 : 3000');
 });

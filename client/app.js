@@ -12,7 +12,7 @@ window.onload = function() {
     setupSocket(socket);
   }
   socket.emit('respawn');
-};
+}
 
 // socket stuff.
 function setupSocket(socket) {
