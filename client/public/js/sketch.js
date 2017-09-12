@@ -491,280 +491,6 @@ process.chdir = function (dir) {
 process.umask = function() { return 0; };
 
 },{}],4:[function(require,module,exports){
-var io = require('socket.io-client');
-var global = require('./global');
-var canvas = require('./canvas');
-
-var socket;
-
-window.onload = function() {
-  if (!socket) {
-    socket = io({
-      query: "type=tetris"
-    });
-    setupSocket(socket);
-  }
-  socket.emit('respawn');
-};
-
-// socket stuff.
-function setupSocket(socket) {
-
-  // Handle error.
-  socket.on('connect_failed', function() {
-    socket.close();
-    global.disconnected = true;
-  });
-
-  socket.on('disconnect', function() {
-    socket.close();
-    global.disconnected = true;
-  });
-
-  // Handle connection.
-  socket.on('welcome', function(playerSettings) {
-    socket.emit('gotit');
-    canvas.emit('redraw',playerSettings) ;
-  });
-
-  socket.on('playerJoin', function(data) {
-    console.log('connected in server ' + data.name);
-    canvas.emit('socketInit',socket);
-  });
-
-  socket.on('playerDisconnect', function(data) {
-    console.log(data.name + ' : Disconnected in server');
-  });
-
-  canvas.on('Key_Pressed',function(key){
-    socket.emit('Key_Pressed',key);
-  });
-
-  // 이 부분도 canvas 모듈에 넘겨주어야 한다.
-  socket.on('UpdateIsPause', function(pauseData) {
-    canvas.emit('UpdateIsPause',pauseData);
-  });
-
-  socket.on('serverTellPlayerMove', function(playerSettings) {
-    canvas.emit('redraw',playerSettings) ;
-    //canvas.emit('drawOtherUsers',playerSettings) ;
-  });
-
-  socket.on('users', function(users) {
-    canvas.emit('drawUsers',users) ;
-  });
-
-}
-
-},{"./canvas":5,"./global":6,"socket.io-client":39}],5:[function(require,module,exports){
-var global = require('./global');
-var inherits = require('inherits');
-var EventEmitter = require('events').EventEmitter;
-var p5Object, drawObject ,games = [];
-
-inherits(DrawTetrisGame, EventEmitter);
-
-function DrawTetrisGame() {
-  if (!(this instanceof DrawTetrisGame)) return new DrawTetrisGame();
-  this.game = {};
-  this.on('redraw', function(inputGame) {
-    for(var i= 0; i < games.length; i++){
-      if(games[i].id === inputGame.id){
-        games[i] = inputGame;
-      }
-    }
-    this.game = inputGame;
-    p5Object.redraw();
-  });
-
-  this.on('UpdateIsPause', function(pauseData) {
-    this.game.isPause = pauseData.data;
-    p5Object.redraw();
-  });
-
-  this.on('drawUsers', function(users) {
-    games = users;
-    p5Object.redraw();
-  });
-
-}
-
-
-DrawTetrisGame.prototype.drawGame = function() {
-  var length = games.length;
-  for(var i=0; i<length; i++){
-    this.drawNextBlock(games[i].nextBlock, games[i].startX, 0);
-    this.drawHoldBlock(games[i].holdBlock, games[i].startX, 0);
-    this.drawTetrisBoard(games[i].board, games[i].startX, 0);
-    this.drawScore(games[i].score, games[i].startX, 0);
-    this.drawState(games[i].isPause, games[i].isGameOver, games[i].startX, 0);
-  }
-
-}
-
-DrawTetrisGame.prototype.drawTetrisBoard = function(board, Sx, Sy) {
-  this.drawBlock(board, global.BOARD_HEIGHT, global.BOARD_WIDTH, 0 + Sx, 170 + Sy);
-}
-
-DrawTetrisGame.prototype.drawBlock = function(board, rowNum, colNum, Sx, Sy) {
-  for (var i = 0; i < rowNum; i++) {
-    for (var j = 0; j < colNum; j++) {
-      /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
-      p5Object.push();
-      p5Object.translate(Sx + j * global.BLOCK_WIDTH, Sy + i * global.BLOCK_HEIGHT);
-      var colorType = '#000000';
-      switch (board[i][j]) {
-        case 11:
-          colorType = '#ed0345';
-          break;
-        case 12:
-          colorType = '#ef6a32';
-          break;
-        case 13:
-          colorType = '#fbbf45';
-          break;
-        case 14:
-          colorType = '#aad962';
-          break;
-        case 15:
-          colorType = '#03c383';
-          break;
-        case 16:
-          colorType = '#017351';
-          break;
-        case 17:
-          colorType = '#a12a5e';
-          break;
-      }
-      p5Object.fill(p5Object.color(colorType)); /*black*/
-      p5Object.rect(0, 0, global.BLOCK_WIDTH, global.BLOCK_HEIGHT);
-      p5Object.pop();
-    }
-  }
-}
-
-DrawTetrisGame.prototype.drawNextBlock = function(board, Sx, Sy) {
-  p5Object.push();
-  p5Object.translate(0 + Sx, 0 + Sy);
-  p5Object.text("Next Block", 0, 20);
-  p5Object.pop();
-  this.drawBlock(board, 4, 4, 0 + Sx, 30 + Sy);
-}
-
-DrawTetrisGame.prototype.drawHoldBlock = function(board, Sx, Sy) {
-  p5Object.push();
-  p5Object.translate(180 + Sx, 0 + Sy);
-  p5Object.text("Hold Block", 0, 20);
-  p5Object.pop();
-  this.drawBlock(board, 4, 4, 180 + Sx, 30 + Sy);
-
-}
-
-DrawTetrisGame.prototype.drawScore = function(score, Sx, Sy) {
-  var str = "SCORE";
-  p5Object.push();
-  p5Object.translate(0 + Sx, 790 + Sy);
-  p5Object.rect(0, 0, 120, 50);
-  p5Object.text(str, 10, 20);
-  p5Object.text(score || 0, 10, 45);
-  p5Object.pop();
-}
-
-DrawTetrisGame.prototype.drawState = function(isPaused, isGameOver, Sx, Sy) {
-  p5Object.push();
-  p5Object.translate(180 + Sx, 790 + Sy);
-  p5Object.rect(0, 0, 120, 50);
-
-  if (isGameOver) {
-    p5Object.text("GAME OVER", 10, 35);
-    p5Object.pop();
-    return;
-  }
-
-  if (isPaused) {
-    p5Object.text("PAUSED", 25, 35);
-  }
-  p5Object.pop();
-}
-
-var p5sketch = function(p) {
-  p5Object = p;
-
-  p.setup = function() {
-    p.createCanvas(1500, 850);
-    p.textSize(20);
-    p.noLoop();
-  }
-  p.draw = function() {
-    if (drawObject.game == undefined) return;
-    p.clear();
-    drawObject.drawGame();
-  }
-  p.keyPressed = function() {
-    var str = '';
-    if (drawObject.game == undefined) return;
-
-    if (drawObject.game.isPause) {
-      if (p.keyCode === p.ENTER) {
-        str = 'Enter_Key';
-      } else if (p.key === 'R') {
-        str = 'R_Key';
-      } else str = 'none';
-    } else {
-      if (p.keyCode === p.ENTER) {
-        str = 'Enter_Key';
-      } else if (p.key === 'R') {
-        str = 'R_Key';
-      } else if (p.key === 'A') {
-        str = 'A_Key';
-      } else if (p.key === 'S') {
-        str = 'S_Key';
-      } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
-        str = 'Space_Key';
-      } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
-        // hold 할 수 없으면 전송하지 않는다.
-        if (drawObject.game.holdable) {
-          str = 'Shift_Key';
-        }
-      } else if (p.keyCode === p.LEFT_ARROW) {
-        str = 'Left_Key';
-      } else if (p.keyCode === p.RIGHT_ARROW) {
-        str = 'Right_Key';
-      } else if (p.keyCode === p.DOWN_ARROW) {
-        str = 'Down_Key';
-      } else if (p.keyCode === p.UP_ARROW) {
-        str = 'Up_Key';
-      } else str = 'none';
-    }
-
-    if (str !== 'none') drawObject.emit('Key_Pressed', {
-      data: str
-    });
-    p.redraw();
-  }
-
-
-}
-
-new p5(p5sketch, 'myp5sketch');
-
-drawObject = new DrawTetrisGame();
-module.exports = drawObject;
-
-},{"./global":6,"events":2,"inherits":33}],6:[function(require,module,exports){
-module.exports = {
-    host: "0.0.0.0",
-    port: 3000,
-    BOARD_WIDTH: 10,
-    BOARD_HEIGHT: 20,
-    BLOCK_WIDTH: 30,
-    BLOCK_HEIGHT: 30,
-    FALLING_TIME: 400,
-    KEY_SPACE : 32,
-    KEY_SHIFT : 16
-	};
-
-},{}],7:[function(require,module,exports){
 module.exports = after
 
 function after(count, callback, err_cb) {
@@ -794,7 +520,7 @@ function after(count, callback, err_cb) {
 
 function noop() {}
 
-},{}],8:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 /**
  * An abstraction for slicing an arraybuffer even when
  * ArrayBuffer.prototype.slice is not supported
@@ -825,7 +551,7 @@ module.exports = function(arraybuffer, start, end) {
   return result.buffer;
 };
 
-},{}],9:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 
 /**
  * Expose `Backoff`.
@@ -912,7 +638,7 @@ Backoff.prototype.setJitter = function(jitter){
 };
 
 
-},{}],10:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 /*
  * base64-arraybuffer
  * https://github.com/niklasvh/base64-arraybuffer
@@ -981,7 +707,7 @@ Backoff.prototype.setJitter = function(jitter){
   };
 })();
 
-},{}],11:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 (function (global){
 /**
  * Create a blob builder even when vendor prefixes exist
@@ -1081,7 +807,7 @@ module.exports = (function() {
 })();
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],12:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 /**
  * Slice reference.
  */
@@ -1106,7 +832,7 @@ module.exports = function(obj, fn){
   }
 };
 
-},{}],13:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 
 /**
  * Expose `Emitter`.
@@ -1271,7 +997,7 @@ Emitter.prototype.hasListeners = function(event){
   return !! this.listeners(event).length;
 };
 
-},{}],14:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 
 module.exports = function(a, b){
   var fn = function(){};
@@ -1279,7 +1005,7 @@ module.exports = function(a, b){
   a.prototype = new fn;
   a.prototype.constructor = a;
 };
-},{}],15:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 (function (process){
 /**
  * This is the web browser implementation of `debug()`.
@@ -1468,7 +1194,7 @@ function localstorage() {
 }
 
 }).call(this,require('_process'))
-},{"./debug":16,"_process":3}],16:[function(require,module,exports){
+},{"./debug":13,"_process":3}],13:[function(require,module,exports){
 
 /**
  * This is the common logic for both the Node.js and web browser
@@ -1672,11 +1398,11 @@ function coerce(val) {
   return val;
 }
 
-},{"ms":35}],17:[function(require,module,exports){
+},{"ms":32}],14:[function(require,module,exports){
 
 module.exports = require('./lib/index');
 
-},{"./lib/index":18}],18:[function(require,module,exports){
+},{"./lib/index":15}],15:[function(require,module,exports){
 
 module.exports = require('./socket');
 
@@ -1688,7 +1414,7 @@ module.exports = require('./socket');
  */
 module.exports.parser = require('engine.io-parser');
 
-},{"./socket":19,"engine.io-parser":27}],19:[function(require,module,exports){
+},{"./socket":16,"engine.io-parser":24}],16:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -2436,7 +2162,7 @@ Socket.prototype.filterUpgrades = function (upgrades) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./transport":20,"./transports/index":21,"component-emitter":13,"debug":15,"engine.io-parser":27,"indexof":32,"parsejson":36,"parseqs":37,"parseuri":38}],20:[function(require,module,exports){
+},{"./transport":17,"./transports/index":18,"component-emitter":10,"debug":12,"engine.io-parser":24,"indexof":29,"parsejson":33,"parseqs":34,"parseuri":35}],17:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -2595,7 +2321,7 @@ Transport.prototype.onClose = function () {
   this.emit('close');
 };
 
-},{"component-emitter":13,"engine.io-parser":27}],21:[function(require,module,exports){
+},{"component-emitter":10,"engine.io-parser":24}],18:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies
@@ -2652,7 +2378,7 @@ function polling (opts) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling-jsonp":22,"./polling-xhr":23,"./websocket":25,"xmlhttprequest-ssl":26}],22:[function(require,module,exports){
+},{"./polling-jsonp":19,"./polling-xhr":20,"./websocket":22,"xmlhttprequest-ssl":23}],19:[function(require,module,exports){
 (function (global){
 
 /**
@@ -2887,7 +2613,7 @@ JSONPPolling.prototype.doWrite = function (data, fn) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling":24,"component-inherit":14}],23:[function(require,module,exports){
+},{"./polling":21,"component-inherit":11}],20:[function(require,module,exports){
 (function (global){
 /**
  * Module requirements.
@@ -3304,7 +3030,7 @@ function unloadHandler () {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./polling":24,"component-emitter":13,"component-inherit":14,"debug":15,"xmlhttprequest-ssl":26}],24:[function(require,module,exports){
+},{"./polling":21,"component-emitter":10,"component-inherit":11,"debug":12,"xmlhttprequest-ssl":23}],21:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -3551,7 +3277,7 @@ Polling.prototype.uri = function () {
   return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
 };
 
-},{"../transport":20,"component-inherit":14,"debug":15,"engine.io-parser":27,"parseqs":37,"xmlhttprequest-ssl":26,"yeast":48}],25:[function(require,module,exports){
+},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"xmlhttprequest-ssl":23,"yeast":45}],22:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -3841,7 +3567,7 @@ WS.prototype.check = function () {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../transport":20,"component-inherit":14,"debug":15,"engine.io-parser":27,"parseqs":37,"ws":1,"yeast":48}],26:[function(require,module,exports){
+},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"ws":1,"yeast":45}],23:[function(require,module,exports){
 (function (global){
 // browser shim for xmlhttprequest module
 
@@ -3882,7 +3608,7 @@ module.exports = function (opts) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"has-cors":31}],27:[function(require,module,exports){
+},{"has-cors":28}],24:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -4492,7 +4218,7 @@ exports.decodePayloadAsBinary = function (data, binaryType, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./keys":28,"./utf8":29,"after":7,"arraybuffer.slice":8,"base64-arraybuffer":10,"blob":11,"has-binary2":30}],28:[function(require,module,exports){
+},{"./keys":25,"./utf8":26,"after":4,"arraybuffer.slice":5,"base64-arraybuffer":7,"blob":8,"has-binary2":27}],25:[function(require,module,exports){
 
 /**
  * Gets the keys for an object.
@@ -4513,7 +4239,7 @@ module.exports = Object.keys || function keys (obj){
   return arr;
 };
 
-},{}],29:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function (global){
 /*! https://mths.be/utf8js v2.1.2 by @mathias */
 ;(function(root) {
@@ -4772,7 +4498,7 @@ module.exports = Object.keys || function keys (obj){
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],30:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 (function (global){
 /* global Blob File */
 
@@ -4838,7 +4564,7 @@ function hasBinary (obj) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"isarray":34}],31:[function(require,module,exports){
+},{"isarray":31}],28:[function(require,module,exports){
 
 /**
  * Module exports.
@@ -4857,7 +4583,7 @@ try {
   module.exports = false;
 }
 
-},{}],32:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 
 var indexOf = [].indexOf;
 
@@ -4868,7 +4594,7 @@ module.exports = function(arr, obj){
   }
   return -1;
 };
-},{}],33:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -4893,14 +4619,14 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],34:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 var toString = {}.toString;
 
 module.exports = Array.isArray || function (arr) {
   return toString.call(arr) == '[object Array]';
 };
 
-},{}],35:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 /**
  * Helpers.
  */
@@ -5054,7 +4780,7 @@ function plural(ms, n, name) {
   return Math.ceil(ms / n) + ' ' + name + 's';
 }
 
-},{}],36:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 (function (global){
 /**
  * JSON parse.
@@ -5089,7 +4815,7 @@ module.exports = function parsejson(data) {
   }
 };
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],37:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /**
  * Compiles a querystring
  * Returns string representation of the object
@@ -5128,7 +4854,7 @@ exports.decode = function(qs){
   return qry;
 };
 
-},{}],38:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 /**
  * Parses an URI
  *
@@ -5169,7 +4895,7 @@ module.exports = function parseuri(str) {
     return uri;
 };
 
-},{}],39:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5265,7 +4991,7 @@ exports.connect = lookup;
 exports.Manager = require('./manager');
 exports.Socket = require('./socket');
 
-},{"./manager":40,"./socket":42,"./url":43,"debug":15,"socket.io-parser":45}],40:[function(require,module,exports){
+},{"./manager":37,"./socket":39,"./url":40,"debug":12,"socket.io-parser":42}],37:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5840,7 +5566,7 @@ Manager.prototype.onreconnect = function () {
   this.emitAll('reconnect', attempt);
 };
 
-},{"./on":41,"./socket":42,"backo2":9,"component-bind":12,"component-emitter":13,"debug":15,"engine.io-client":17,"indexof":32,"socket.io-parser":45}],41:[function(require,module,exports){
+},{"./on":38,"./socket":39,"backo2":6,"component-bind":9,"component-emitter":10,"debug":12,"engine.io-client":14,"indexof":29,"socket.io-parser":42}],38:[function(require,module,exports){
 
 /**
  * Module exports.
@@ -5866,7 +5592,7 @@ function on (obj, ev, fn) {
   };
 }
 
-},{}],42:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6286,7 +6012,7 @@ Socket.prototype.compress = function (compress) {
   return this;
 };
 
-},{"./on":41,"component-bind":12,"component-emitter":13,"debug":15,"parseqs":37,"socket.io-parser":45,"to-array":47}],43:[function(require,module,exports){
+},{"./on":38,"component-bind":9,"component-emitter":10,"debug":12,"parseqs":34,"socket.io-parser":42,"to-array":44}],40:[function(require,module,exports){
 (function (global){
 
 /**
@@ -6365,7 +6091,7 @@ function url (uri, loc) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"debug":15,"parseuri":38}],44:[function(require,module,exports){
+},{"debug":12,"parseuri":35}],41:[function(require,module,exports){
 (function (global){
 /*global Blob,File*/
 
@@ -6510,7 +6236,7 @@ exports.removeBlobs = function(data, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./is-buffer":46,"isarray":34}],45:[function(require,module,exports){
+},{"./is-buffer":43,"isarray":31}],42:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6844,7 +6570,7 @@ function tryParse(p, str) {
   } catch(e){
     return error();
   }
-  return p;
+  return p; 
 }
 
 /**
@@ -6912,7 +6638,7 @@ function error() {
   };
 }
 
-},{"./binary":44,"./is-buffer":46,"component-emitter":13,"debug":15,"has-binary2":30}],46:[function(require,module,exports){
+},{"./binary":41,"./is-buffer":43,"component-emitter":10,"debug":12,"has-binary2":27}],43:[function(require,module,exports){
 (function (global){
 
 module.exports = isBuf;
@@ -6929,7 +6655,7 @@ function isBuf(obj) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],47:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 module.exports = toArray
 
 function toArray(list, index) {
@@ -6944,7 +6670,7 @@ function toArray(list, index) {
     return array
 }
 
-},{}],48:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 'use strict';
 
 var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
@@ -7014,4 +6740,311 @@ yeast.encode = encode;
 yeast.decode = decode;
 module.exports = yeast;
 
-},{}]},{},[4]);
+},{}],46:[function(require,module,exports){
+var global = require('./global');
+
+function DrawTetrisGame(p) {
+    var self = this;
+    if (!(self instanceof DrawTetrisGame)) return new DrawTetrisGame(p);
+
+    self.p5Object = p;
+}
+
+
+DrawTetrisGame.prototype.drawGame = function (game) {
+    this.drawNextBlock(game.nextBlock, game.startX, 0);
+    this.drawHoldBlock(game.holdBlock, game.startX, 0);
+    this.drawTetrisBoard(game.board, game.startX, 0);
+    this.drawScore(game.score, game.startX, 0);
+    this.drawState(game.isPause, game.isGameOver, game.startX, 0);
+};
+
+DrawTetrisGame.prototype.drawTetrisBoard = function (board, Sx, Sy) {
+    var self = this;
+    this.drawBlock(board, global.BOARD_HEIGHT, global.BOARD_WIDTH, 0 + Sx, 170 + Sy);
+};
+
+DrawTetrisGame.prototype.drawBlock = function (board, rowNum, colNum, Sx, Sy) {
+    var self = this;
+
+    for (var i = 0; i < rowNum; i++) {
+        for (var j = 0; j < colNum; j++) {
+            /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
+            self.p5Object.push();
+            self.p5Object.translate(Sx + j * global.BLOCK_WIDTH, Sy + i * global.BLOCK_HEIGHT);
+            var colorType = '#000000';
+            switch (board[i][j]) {
+                case 11:
+                    colorType = '#ed0345';
+                    break;
+                case 12:
+                    colorType = '#ef6a32';
+                    break;
+                case 13:
+                    colorType = '#fbbf45';
+                    break;
+                case 14:
+                    colorType = '#aad962';
+                    break;
+                case 15:
+                    colorType = '#03c383';
+                    break;
+                case 16:
+                    colorType = '#017351';
+                    break;
+                case 17:
+                    colorType = '#a12a5e';
+                    break;
+            }
+            self.p5Object.fill(self.p5Object.color(colorType));
+            /*black*/
+            self.p5Object.rect(0, 0, global.BLOCK_WIDTH, global.BLOCK_HEIGHT);
+            self.p5Object.pop();
+        }
+    }
+};
+
+DrawTetrisGame.prototype.drawNextBlock = function (board, Sx, Sy) {
+    var self = this;
+
+    self.p5Object.push();
+    self.p5Object.translate(0 + Sx, 0 + Sy);
+    self.p5Object.text("Next Block", 0, 20);
+    self.p5Object.pop();
+    this.drawBlock(board, 4, 4, 0 + Sx, 30 + Sy);
+};
+
+DrawTetrisGame.prototype.drawHoldBlock = function (board, Sx, Sy) {
+    var self = this;
+
+    self.p5Object.push();
+    self.p5Object.translate(180 + Sx, 0 + Sy);
+    self.p5Object.text("Hold Block", 0, 20);
+    self.p5Object.pop();
+    this.drawBlock(board, 4, 4, 180 + Sx, 30 + Sy);
+
+};
+
+DrawTetrisGame.prototype.drawScore = function (score, Sx, Sy) {
+    var self = this;
+
+    var str = "SCORE";
+    self.p5Object.push();
+    self.p5Object.translate(0 + Sx, 790 + Sy);
+    self.p5Object.rect(0, 0, 120, 50);
+    self.p5Object.text(str, 10, 20);
+    self.p5Object.text(score || 0, 10, 45);
+    self.p5Object.pop();
+};
+
+DrawTetrisGame.prototype.drawState = function (isPaused, isGameOver, Sx, Sy) {
+    var self = this;
+
+    self.p5Object.push();
+    self.p5Object.translate(180 + Sx, 790 + Sy);
+    self.p5Object.rect(0, 0, 120, 50);
+
+    if (isGameOver) {
+        self.p5Object.text("GAME OVER", 10, 35);
+        self.p5Object.pop();
+        return;
+    }
+
+    if (isPaused) {
+        self.p5Object.text("PAUSED", 25, 35);
+    }
+    self.p5Object.pop();
+};
+
+module.exports = DrawTetrisGame;
+
+},{"./global":47}],47:[function(require,module,exports){
+module.exports = {
+    host: "127.0.0.1",
+    port: 3000,
+    BOARD_WIDTH: 10,
+    BOARD_HEIGHT: 20,
+    BLOCK_WIDTH: 30,
+    BLOCK_HEIGHT: 30,
+    FALLING_TIME: 400,
+    KEY_SPACE : 32,
+    KEY_SHIFT : 16
+	};
+
+},{}],48:[function(require,module,exports){
+var io = require('socket.io-client');
+var global = require('./global');
+var Main = require('./main');
+
+window.onload = function () {
+    new ClientManager();
+};
+
+function ClientManager() {
+    var self = this;
+
+    if (!(self instanceof ClientManager)) new ClientManager();
+
+    self.main = new Main();
+    self.socket = io({
+        query: "type=tetris"
+    });
+
+    self.setupSocket(self.socket);
+}
+
+ClientManager.prototype.setupSocket = function (socket) {
+    var self = this;
+
+    socket.emit('respawn');
+
+    // Handle error.
+    socket.on('connect_failed', function () {
+        socket.close();
+        global.disconnected = true;
+    });
+
+    socket.on('disconnect', function () {
+        socket.close();
+        global.disconnected = true;
+    });
+
+    // Handle connection.
+    socket.on('welcome', function (playerSettings) {
+        socket.emit('gotit');
+        self.main.startGame(playerSettings);
+    });
+
+    socket.on('playerJoin', function (data) {
+        console.log('connected in server :' + data.name);
+    });
+
+    self.main.on('Key_Pressed', function (key) {
+        socket.emit('Key_Pressed', key);
+    });
+
+    socket.on('playerDisconnect', function (data) {
+        console.log('Disconnected in server : ' + data.name);
+    });
+
+
+    socket.on('serverTellPlayerMove', function (playerSettings) {
+        self.main.emit('redraw', playerSettings);
+        //canvas.emit('drawOtherUsers',playerSettings) ;
+    });
+
+    socket.on('users', function (users) {
+        self.main.emit('drawUsers', users);
+    });
+};
+
+
+},{"./global":47,"./main":49,"socket.io-client":36}],49:[function(require,module,exports){
+var DrawTetrisGame = require('./drawTetrisGame');
+var EventEmitter = require('events').EventEmitter;
+var inherits = require('inherits');
+var global = require('./global');
+
+var p5Object, games = [];
+
+inherits(Main, EventEmitter);
+
+function Main() {
+    var self = this;
+
+    self.allowedKeys = {
+        37: 'left',
+        38: 'up',
+        39: 'right',
+        40: 'down',
+        32: 'space'
+    };
+
+    self.game = {};
+
+    self.on('redraw', function(inputGame) {
+        console.log(inputGame)
+        self.game = inputGame;
+        p5Object.redraw();
+    });
+
+    self.on('UpdateIsPause', function(pauseData) {
+        self.game.isPause = pauseData.data;
+        p5Object.redraw();
+    });
+
+    self.on('drawUsers', function(users) {
+        self.game = users[0];
+        p5Object.redraw();
+    });
+
+    self.p5sketch = function(p) {
+        p5Object = p;
+        self.drawObj = new DrawTetrisGame(p);
+
+        p.setup = function() {
+            p.createCanvas(1500, 850);
+            p.textSize(20);
+            p.noLoop();
+        };
+
+        p.draw = function() {
+            //if (self.game.find == undefined) return;
+            p.clear();
+            self.drawObj.drawGame(self.game);
+        };
+
+        p.keyPressed = function() {
+            var str = '';
+            //if (self.game.find == undefined) return;
+
+            if (self.game.isPause) {
+                if (p.keyCode === p.ENTER) {
+                    str = 'Enter_Key';
+                } else if (p.key === 'R') {
+                    str = 'R_Key';
+                } else str = 'none';
+            } else {
+                if (p.keyCode === p.ENTER) {
+                    str = 'Enter_Key';
+                } else if (p.key === 'R') {
+                    str = 'R_Key';
+                } else if (p.key === 'A') {
+                    str = 'A_Key';
+                } else if (p.key === 'S') {
+                    str = 'S_Key';
+                } else if (p.keyCode === global.KEY_SPACE) { /*space bar*/
+                    str = 'Space_Key';
+                } else if (p.keyCode === global.KEY_SHIFT) { /*shift*/
+                    // hold 할 수 없으면 전송하지 않는다.
+                    if (self.game.holdable) {
+                        str = 'Shift_Key';
+                    }
+                } else if (p.keyCode === p.LEFT_ARROW) {
+                    str = 'Left_Key';
+                } else if (p.keyCode === p.RIGHT_ARROW) {
+                    str = 'Right_Key';
+                } else if (p.keyCode === p.DOWN_ARROW) {
+                    str = 'Down_Key';
+                } else if (p.keyCode === p.UP_ARROW) {
+                    str = 'Up_Key';
+                } else str = 'none';
+            }
+
+            if (str !== 'none') self.emit('Key_Pressed', {
+                data: str
+            });
+            p.redraw();
+        };
+    };
+}
+
+Main.prototype.startGame = function (game) {
+    var self = this;
+    self.game = game;
+    new p5(self.p5sketch, 'myp5sketch');
+};
+
+
+module.exports = Main;
+},{"./drawTetrisGame":46,"./global":47,"events":2,"inherits":30}]},{},[48]);
