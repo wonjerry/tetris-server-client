@@ -1,13 +1,12 @@
-var global = require('./global');
+//var global = require('./global');
 var Shape = require('./shape');
-
+var DrawTetrisGame = require('./drawTetrisGame');
 
 /*전체적으로 게임을 진행시키기 위한 데이터와 메소드를 담고있는 객체*/
 function TetrisGame() {
 
     var self = this;
     if (!(self instanceof TetrisGame)) return new TetrisGame();
-
 
     self.intervalHandler = -1;
 
@@ -22,11 +21,12 @@ function TetrisGame() {
     /*id는 각 클라이언트 소켓에 할당된 id로 지정한다.*/
     self.id = -1;
 
+
     self.board = [];
 
-    for (var i = 0; i < global.BOARD_HEIGHT; i++) {
+    for (var i = 0; i < 20; i++) {
         self.board[i] = [];
-        for (var j = 0; j < global.BOARD_WIDTH; j++) {
+        for (var j = 0; j < 10; j++) {
             self.board[i][j] = 0;
         }
     }
@@ -43,6 +43,37 @@ function TetrisGame() {
 
 3.  겹치지 않는다면 블록을 한 칸 내린다.
 */
+
+TetrisGame.prototype.handleInput = function (key) {
+    var self = this;
+
+    switch (key){
+        case 'a':
+            self.rotateLeft();
+            break;
+        case 's':
+            self.rotateRight();
+            break;
+        case 'left':
+            self.steerLeft();
+            break;
+        case 'right':
+            self.steerRight();
+            break;
+        case 'up':
+            self.rotateRight();
+            break;
+        case 'down':
+            self.steerDown();
+            break;
+        case 'space':
+            self.letFall();
+            break;
+        case 'shift':
+            self.hold();
+            break;
+    }
+};
 
 TetrisGame.prototype.go = function () {
     var self = this;

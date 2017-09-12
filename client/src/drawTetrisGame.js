@@ -9,8 +9,8 @@ function DrawTetrisGame(p) {
 
 
 DrawTetrisGame.prototype.drawGame = function (game) {
-    this.drawNextBlock(game.nextBlock, game.startX, 0);
-    this.drawHoldBlock(game.holdBlock, game.startX, 0);
+    this.drawNextBlock(game.block.nextBlock, game.startX, 0);
+    this.drawHoldBlock(game.block.holdBlock, game.startX, 0);
     this.drawTetrisBoard(game.board, game.startX, 0);
     this.drawScore(game.score, game.startX, 0);
     this.drawState(game.isPause, game.isGameOver, game.startX, 0);
