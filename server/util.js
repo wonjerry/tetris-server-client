@@ -1,11 +1,13 @@
-exports.findIndex = function(arr, id) {
-    var len = arr.length;
-
-    while (len--) {
-        if (arr[len].id === id) {
-            return len;
-        }
-    }
-
-    return -1;
+module.exports = {
+    GAMESTATES : {
+        INIT: 0,
+        READY: 1
+    },
+    ACTION_TYPE : {
+        CONNECTION: 0,
+        SEED_RECIVED: 1,
+        ACTION_MADE: 2,
+        STATE_RESTORE: 3,
+        DISCONNECT: 4
+    },
 };

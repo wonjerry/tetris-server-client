@@ -9,9 +9,9 @@ function DrawTetrisGame(p) {
 
 
 DrawTetrisGame.prototype.drawGame = function (game) {
-    this.drawNextBlock(game.nextBlock, game.startX, 0);
-    this.drawHoldBlock(game.holdBlock, game.startX, 0);
-    this.drawTetrisBoard(game.board, game.startX, 0);
+    this.drawNextBlock(game.block.nextBlock, game.startX, 0);
+    this.drawHoldBlock(game.block.holdBlock, game.startX, 0);
+    this.drawTetrisBoard(game.getBoard(), game.startX, 0);
     this.drawScore(game.score, game.startX, 0);
     this.drawState(game.isPause, game.isGameOver, game.startX, 0);
 };
@@ -29,8 +29,11 @@ DrawTetrisGame.prototype.drawBlock = function (board, rowNum, colNum, Sx, Sy) {
             /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
             self.p5Object.push();
             self.p5Object.translate(Sx + j * global.BLOCK_WIDTH, Sy + i * global.BLOCK_HEIGHT);
-            var colorType = '#000000';
+            var colorType;
             switch (board[i][j]) {
+                case 0:
+                    colorType = '#000000';
+                    break;
                 case 11:
                     colorType = '#ed0345';
                     break;
@@ -52,7 +55,11 @@ DrawTetrisGame.prototype.drawBlock = function (board, rowNum, colNum, Sx, Sy) {
                 case 17:
                     colorType = '#a12a5e';
                     break;
+                default:
+                    colorType = '#000000';
+                    break;
             }
+
             self.p5Object.fill(self.p5Object.color(colorType));
             /*black*/
             self.p5Object.rect(0, 0, global.BLOCK_WIDTH, global.BLOCK_HEIGHT);

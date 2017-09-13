@@ -1,4 +1,4 @@
-var global = require('./global');
+var global = require('../../client/src/global');
 
 function Shape() {
     var self = this;

@@ -1,9 +1,10 @@
 var global = require('../../client/src/global');
+var SeedRandom = require('seedrandom');
 
-function Shape() {
+function Shape(randomSeed) {
     var self = this;
 
-    if (!(self instanceof Shape)) return new Shape();
+    if (!(self instanceof Shape)) return new Shape(randomSeed);
 
     self.BLOCKS = [
         [
@@ -49,6 +50,10 @@ function Shape() {
             [0, 0, 0, 0]
         ]
     ];
+
+    self.randomSeed = randomSeed || Date.now();
+    self.random = SeedRandom(self.randomSeed);
+
     self.X = 3;
     self.Y = 0;
     self.currentBlock = self.randomBlock();
@@ -145,8 +150,9 @@ Shape.prototype.deleteLine = function (board) {
 
 Shape.prototype.randomBlock = function () {
     var self = this;
+    var index = Math.floor(self.random() * self.BLOCKS.length);
+    return self.BLOCKS[index];
 
-    return self.BLOCKS[Math.floor(Math.random() * self.BLOCKS.length)];
 };
 
 Shape.prototype.clone = function (origin, target) {

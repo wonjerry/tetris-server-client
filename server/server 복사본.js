@@ -17,16 +17,7 @@ app.use(express.static(__dirname + '/../client/public'));
 
 /*클라이언트에서 접속이 이루어지고 서버로 요청이 들어오면 받아서 새로운 플레이어를 만들어 준다 그리고 클라이언트에 보내준다..*/
 io.on('connection', function (socket) {
-
-    socket.on('join', function (message) {
-        console.log('Client has connected!!!!: ' + socket.id);
-        roomManager.requestGameRoom(socket);
-    });
-
-    socket.on('disconnect', function () {
-        console.log('Client has disconnected: ' + socket.id);
-        //roomManager.userDisconnect(socket);
-    });
+    setupTetrisSocket(socket);
 
 });
 
@@ -96,6 +87,16 @@ function setupTetrisSocket(socket) {
             global.FALLING_TIME
         ));
 
+    });
+
+    socket.on('disconnect', function () {
+        if (util.findIndex(users, currentPlayer.getId()) > -1)
+            users.splice(util.findIndex(users, currentPlayer.getId()), 1);
+        console.log('[INFO] User disconnected!');
+
+        socket.broadcast.emit('playerDisconnect', {
+            name: currentPlayer.getId()
+        });
     });
 
     // 나는 어떤 키보드가 눌렸을 경우는 on 하고 있다가 눌리면 그것에 대한 응답 및 처리를 즉각적으로 해 주어야 한다.
@@ -198,7 +199,6 @@ function setupTetrisSocket(socket) {
         }
 
     });
-
 }
 
 /*
