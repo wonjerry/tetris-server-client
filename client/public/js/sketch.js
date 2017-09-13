@@ -3277,7 +3277,7 @@ Polling.prototype.uri = function () {
   return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
 };
 
-},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"xmlhttprequest-ssl":23,"yeast":45}],22:[function(require,module,exports){
+},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"xmlhttprequest-ssl":23,"yeast":53}],22:[function(require,module,exports){
 (function (global){
 /**
  * Module dependencies.
@@ -3567,7 +3567,7 @@ WS.prototype.check = function () {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"ws":1,"yeast":45}],23:[function(require,module,exports){
+},{"../transport":17,"component-inherit":11,"debug":12,"engine.io-parser":24,"parseqs":34,"ws":1,"yeast":53}],23:[function(require,module,exports){
 (function (global){
 // browser shim for xmlhttprequest module
 
@@ -4896,6 +4896,956 @@ module.exports = function parseuri(str) {
 };
 
 },{}],36:[function(require,module,exports){
+// A library of seedable RNGs implemented in Javascript.
+//
+// Usage:
+//
+// var seedrandom = require('seedrandom');
+// var random = seedrandom(1); // or any seed.
+// var x = random();       // 0 <= x < 1.  Every bit is random.
+// var x = random.quick(); // 0 <= x < 1.  32 bits of randomness.
+
+// alea, a 53-bit multiply-with-carry generator by Johannes Baagøe.
+// Period: ~2^116
+// Reported to pass all BigCrush tests.
+var alea = require('./lib/alea');
+
+// xor128, a pure xor-shift generator by George Marsaglia.
+// Period: 2^128-1.
+// Reported to fail: MatrixRank and LinearComp.
+var xor128 = require('./lib/xor128');
+
+// xorwow, George Marsaglia's 160-bit xor-shift combined plus weyl.
+// Period: 2^192-2^32
+// Reported to fail: CollisionOver, SimpPoker, and LinearComp.
+var xorwow = require('./lib/xorwow');
+
+// xorshift7, by François Panneton and Pierre L'ecuyer, takes
+// a different approach: it adds robustness by allowing more shifts
+// than Marsaglia's original three.  It is a 7-shift generator
+// with 256 bits, that passes BigCrush with no systmatic failures.
+// Period 2^256-1.
+// No systematic BigCrush failures reported.
+var xorshift7 = require('./lib/xorshift7');
+
+// xor4096, by Richard Brent, is a 4096-bit xor-shift with a
+// very long period that also adds a Weyl generator. It also passes
+// BigCrush with no systematic failures.  Its long period may
+// be useful if you have many generators and need to avoid
+// collisions.
+// Period: 2^4128-2^32.
+// No systematic BigCrush failures reported.
+var xor4096 = require('./lib/xor4096');
+
+// Tyche-i, by Samuel Neves and Filipe Araujo, is a bit-shifting random
+// number generator derived from ChaCha, a modern stream cipher.
+// https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
+// Period: ~2^127
+// No systematic BigCrush failures reported.
+var tychei = require('./lib/tychei');
+
+// The original ARC4-based prng included in this library.
+// Period: ~2^1600
+var sr = require('./seedrandom');
+
+sr.alea = alea;
+sr.xor128 = xor128;
+sr.xorwow = xorwow;
+sr.xorshift7 = xorshift7;
+sr.xor4096 = xor4096;
+sr.tychei = tychei;
+
+module.exports = sr;
+
+},{"./lib/alea":37,"./lib/tychei":38,"./lib/xor128":39,"./lib/xor4096":40,"./lib/xorshift7":41,"./lib/xorwow":42,"./seedrandom":43}],37:[function(require,module,exports){
+// A port of an algorithm by Johannes Baagøe <baagoe@baagoe.com>, 2010
+// http://baagoe.com/en/RandomMusings/javascript/
+// https://github.com/nquinlan/better-random-numbers-for-javascript-mirror
+// Original work is under MIT license -
+
+// Copyright (C) 2010 by Johannes Baagøe <baagoe@baagoe.org>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+
+
+(function(global, module, define) {
+
+function Alea(seed) {
+  var me = this, mash = Mash();
+
+  me.next = function() {
+    var t = 2091639 * me.s0 + me.c * 2.3283064365386963e-10; // 2^-32
+    me.s0 = me.s1;
+    me.s1 = me.s2;
+    return me.s2 = t - (me.c = t | 0);
+  };
+
+  // Apply the seeding algorithm from Baagoe.
+  me.c = 1;
+  me.s0 = mash(' ');
+  me.s1 = mash(' ');
+  me.s2 = mash(' ');
+  me.s0 -= mash(seed);
+  if (me.s0 < 0) { me.s0 += 1; }
+  me.s1 -= mash(seed);
+  if (me.s1 < 0) { me.s1 += 1; }
+  me.s2 -= mash(seed);
+  if (me.s2 < 0) { me.s2 += 1; }
+  mash = null;
+}
+
+function copy(f, t) {
+  t.c = f.c;
+  t.s0 = f.s0;
+  t.s1 = f.s1;
+  t.s2 = f.s2;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new Alea(seed),
+      state = opts && opts.state,
+      prng = xg.next;
+  prng.int32 = function() { return (xg.next() * 0x100000000) | 0; }
+  prng.double = function() {
+    return prng() + (prng() * 0x200000 | 0) * 1.1102230246251565e-16; // 2^-53
+  };
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+function Mash() {
+  var n = 0xefc8249d;
+
+  var mash = function(data) {
+    data = data.toString();
+    for (var i = 0; i < data.length; i++) {
+      n += data.charCodeAt(i);
+      var h = 0.02519603282416938 * n;
+      n = h >>> 0;
+      h -= n;
+      h *= n;
+      n = h >>> 0;
+      h -= n;
+      n += h * 0x100000000; // 2^32
+    }
+    return (n >>> 0) * 2.3283064365386963e-10; // 2^-32
+  };
+
+  return mash;
+}
+
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.alea = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+
+
+},{}],38:[function(require,module,exports){
+// A Javascript implementaion of the "Tyche-i" prng algorithm by
+// Samuel Neves and Filipe Araujo.
+// See https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  // Set up generator function.
+  me.next = function() {
+    var b = me.b, c = me.c, d = me.d, a = me.a;
+    b = (b << 25) ^ (b >>> 7) ^ c;
+    c = (c - d) | 0;
+    d = (d << 24) ^ (d >>> 8) ^ a;
+    a = (a - b) | 0;
+    me.b = b = (b << 20) ^ (b >>> 12) ^ c;
+    me.c = c = (c - d) | 0;
+    me.d = (d << 16) ^ (c >>> 16) ^ a;
+    return me.a = (a - b) | 0;
+  };
+
+  /* The following is non-inverted tyche, which has better internal
+   * bit diffusion, but which is about 25% slower than tyche-i in JS.
+  me.next = function() {
+    var a = me.a, b = me.b, c = me.c, d = me.d;
+    a = (me.a + me.b | 0) >>> 0;
+    d = me.d ^ a; d = d << 16 ^ d >>> 16;
+    c = me.c + d | 0;
+    b = me.b ^ c; b = b << 12 ^ d >>> 20;
+    me.a = a = a + b | 0;
+    d = d ^ a; me.d = d = d << 8 ^ d >>> 24;
+    me.c = c = c + d | 0;
+    b = b ^ c;
+    return me.b = (b << 7 ^ b >>> 25);
+  }
+  */
+
+  me.a = 0;
+  me.b = 0;
+  me.c = 2654435769 | 0;
+  me.d = 1367130551;
+
+  if (seed === Math.floor(seed)) {
+    // Integer seed.
+    me.a = (seed / 0x100000000) | 0;
+    me.b = seed | 0;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 20; k++) {
+    me.b ^= strseed.charCodeAt(k) | 0;
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.a = f.a;
+  t.b = f.b;
+  t.c = f.c;
+  t.d = f.d;
+  return t;
+};
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.tychei = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+
+
+},{}],39:[function(require,module,exports){
+// A Javascript implementaion of the "xor128" prng algorithm by
+// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  me.x = 0;
+  me.y = 0;
+  me.z = 0;
+  me.w = 0;
+
+  // Set up generator function.
+  me.next = function() {
+    var t = me.x ^ (me.x << 11);
+    me.x = me.y;
+    me.y = me.z;
+    me.z = me.w;
+    return me.w ^= (me.w >>> 19) ^ t ^ (t >>> 8);
+  };
+
+  if (seed === (seed | 0)) {
+    // Integer seed.
+    me.x = seed;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 64; k++) {
+    me.x ^= strseed.charCodeAt(k) | 0;
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.x = f.x;
+  t.y = f.y;
+  t.z = f.z;
+  t.w = f.w;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.xor128 = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+
+
+},{}],40:[function(require,module,exports){
+// A Javascript implementaion of Richard Brent's Xorgens xor4096 algorithm.
+//
+// This fast non-cryptographic random number generator is designed for
+// use in Monte-Carlo algorithms. It combines a long-period xorshift
+// generator with a Weyl generator, and it passes all common batteries
+// of stasticial tests for randomness while consuming only a few nanoseconds
+// for each prng generated.  For background on the generator, see Brent's
+// paper: "Some long-period random number generators using shifts and xors."
+// http://arxiv.org/pdf/1004.3115v1.pdf
+//
+// Usage:
+//
+// var xor4096 = require('xor4096');
+// random = xor4096(1);                        // Seed with int32 or string.
+// assert.equal(random(), 0.1520436450538547); // (0, 1) range, 53 bits.
+// assert.equal(random.int32(), 1806534897);   // signed int32, 32 bits.
+//
+// For nonzero numeric keys, this impelementation provides a sequence
+// identical to that by Brent's xorgens 3 implementaion in C.  This
+// implementation also provides for initalizing the generator with
+// string seeds, or for saving and restoring the state of the generator.
+//
+// On Chrome, this prng benchmarks about 2.1 times slower than
+// Javascript's built-in Math.random().
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this;
+
+  // Set up generator function.
+  me.next = function() {
+    var w = me.w,
+        X = me.X, i = me.i, t, v;
+    // Update Weyl generator.
+    me.w = w = (w + 0x61c88647) | 0;
+    // Update xor generator.
+    v = X[(i + 34) & 127];
+    t = X[i = ((i + 1) & 127)];
+    v ^= v << 13;
+    t ^= t << 17;
+    v ^= v >>> 15;
+    t ^= t >>> 12;
+    // Update Xor generator array state.
+    v = X[i] = v ^ t;
+    me.i = i;
+    // Result is the combination.
+    return (v + (w ^ (w >>> 16))) | 0;
+  };
+
+  function init(me, seed) {
+    var t, v, i, j, w, X = [], limit = 128;
+    if (seed === (seed | 0)) {
+      // Numeric seeds initialize v, which is used to generates X.
+      v = seed;
+      seed = null;
+    } else {
+      // String seeds are mixed into v and X one character at a time.
+      seed = seed + '\0';
+      v = 0;
+      limit = Math.max(limit, seed.length);
+    }
+    // Initialize circular array and weyl value.
+    for (i = 0, j = -32; j < limit; ++j) {
+      // Put the unicode characters into the array, and shuffle them.
+      if (seed) v ^= seed.charCodeAt((j + 32) % seed.length);
+      // After 32 shuffles, take v as the starting w value.
+      if (j === 0) w = v;
+      v ^= v << 10;
+      v ^= v >>> 15;
+      v ^= v << 4;
+      v ^= v >>> 13;
+      if (j >= 0) {
+        w = (w + 0x61c88647) | 0;     // Weyl.
+        t = (X[j & 127] ^= (v + w));  // Combine xor and weyl to init array.
+        i = (0 == t) ? i + 1 : 0;     // Count zeroes.
+      }
+    }
+    // We have detected all zeroes; make the key nonzero.
+    if (i >= 128) {
+      X[(seed && seed.length || 0) & 127] = -1;
+    }
+    // Run the generator 512 times to further mix the state before using it.
+    // Factoring this as a function slows the main generator, so it is just
+    // unrolled here.  The weyl generator is not advanced while warming up.
+    i = 127;
+    for (j = 4 * 128; j > 0; --j) {
+      v = X[(i + 34) & 127];
+      t = X[i = ((i + 1) & 127)];
+      v ^= v << 13;
+      t ^= t << 17;
+      v ^= v >>> 15;
+      t ^= t >>> 12;
+      X[i] = v ^ t;
+    }
+    // Storing state as object members is faster than using closure variables.
+    me.w = w;
+    me.X = X;
+    me.i = i;
+  }
+
+  init(me, seed);
+}
+
+function copy(f, t) {
+  t.i = f.i;
+  t.w = f.w;
+  t.X = f.X.slice();
+  return t;
+};
+
+function impl(seed, opts) {
+  if (seed == null) seed = +(new Date);
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (state.X) copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.xor4096 = impl;
+}
+
+})(
+  this,                                     // window object or global
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+},{}],41:[function(require,module,exports){
+// A Javascript implementaion of the "xorshift7" algorithm by
+// François Panneton and Pierre L'ecuyer:
+// "On the Xorgshift Random Number Generators"
+// http://saluc.engr.uconn.edu/refs/crypto/rng/panneton05onthexorshift.pdf
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this;
+
+  // Set up generator function.
+  me.next = function() {
+    // Update xor generator.
+    var X = me.x, i = me.i, t, v, w;
+    t = X[i]; t ^= (t >>> 7); v = t ^ (t << 24);
+    t = X[(i + 1) & 7]; v ^= t ^ (t >>> 10);
+    t = X[(i + 3) & 7]; v ^= t ^ (t >>> 3);
+    t = X[(i + 4) & 7]; v ^= t ^ (t << 7);
+    t = X[(i + 7) & 7]; t = t ^ (t << 13); v ^= t ^ (t << 9);
+    X[i] = v;
+    me.i = (i + 1) & 7;
+    return v;
+  };
+
+  function init(me, seed) {
+    var j, w, X = [];
+
+    if (seed === (seed | 0)) {
+      // Seed state array using a 32-bit integer.
+      w = X[0] = seed;
+    } else {
+      // Seed state using a string.
+      seed = '' + seed;
+      for (j = 0; j < seed.length; ++j) {
+        X[j & 7] = (X[j & 7] << 15) ^
+            (seed.charCodeAt(j) + X[(j + 1) & 7] << 13);
+      }
+    }
+    // Enforce an array length of 8, not all zeroes.
+    while (X.length < 8) X.push(0);
+    for (j = 0; j < 8 && X[j] === 0; ++j);
+    if (j == 8) w = X[7] = -1; else w = X[j];
+
+    me.x = X;
+    me.i = 0;
+
+    // Discard an initial 256 values.
+    for (j = 256; j > 0; --j) {
+      me.next();
+    }
+  }
+
+  init(me, seed);
+}
+
+function copy(f, t) {
+  t.x = f.x.slice();
+  t.i = f.i;
+  return t;
+}
+
+function impl(seed, opts) {
+  if (seed == null) seed = +(new Date);
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (state.x) copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.xorshift7 = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+
+},{}],42:[function(require,module,exports){
+// A Javascript implementaion of the "xorwow" prng algorithm by
+// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  // Set up generator function.
+  me.next = function() {
+    var t = (me.x ^ (me.x >>> 2));
+    me.x = me.y; me.y = me.z; me.z = me.w; me.w = me.v;
+    return (me.d = (me.d + 362437 | 0)) +
+       (me.v = (me.v ^ (me.v << 4)) ^ (t ^ (t << 1))) | 0;
+  };
+
+  me.x = 0;
+  me.y = 0;
+  me.z = 0;
+  me.w = 0;
+  me.v = 0;
+
+  if (seed === (seed | 0)) {
+    // Integer seed.
+    me.x = seed;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 64; k++) {
+    me.x ^= strseed.charCodeAt(k) | 0;
+    if (k == strseed.length) {
+      me.d = me.x << 10 ^ me.x >>> 4;
+    }
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.x = f.x;
+  t.y = f.y;
+  t.z = f.z;
+  t.w = f.w;
+  t.v = f.v;
+  t.d = f.d;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (define && define.amd) {
+  define(function() { return impl; });
+} else {
+  this.xorwow = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  (typeof define) == 'function' && define   // present with an AMD loader
+);
+
+
+
+},{}],43:[function(require,module,exports){
+/*
+Copyright 2014 David Bau.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
+
+(function (pool, math) {
+//
+// The following constants are related to IEEE 754 limits.
+//
+var global = this,
+    width = 256,        // each RC4 output is 0 <= x < 256
+    chunks = 6,         // at least six RC4 outputs for each double
+    digits = 52,        // there are 52 significant digits in a double
+    rngname = 'random', // rngname: name for Math.random and Math.seedrandom
+    startdenom = math.pow(width, chunks),
+    significance = math.pow(2, digits),
+    overflow = significance * 2,
+    mask = width - 1,
+    nodecrypto;         // node.js crypto module, initialized at the bottom.
+
+//
+// seedrandom()
+// This is the seedrandom function described above.
+//
+function seedrandom(seed, options, callback) {
+  var key = [];
+  options = (options == true) ? { entropy: true } : (options || {});
+
+  // Flatten the seed string or build one from local entropy if needed.
+  var shortseed = mixkey(flatten(
+    options.entropy ? [seed, tostring(pool)] :
+    (seed == null) ? autoseed() : seed, 3), key);
+
+  // Use the seed to initialize an ARC4 generator.
+  var arc4 = new ARC4(key);
+
+  // This function returns a random double in [0, 1) that contains
+  // randomness in every bit of the mantissa of the IEEE 754 value.
+  var prng = function() {
+    var n = arc4.g(chunks),             // Start with a numerator n < 2 ^ 48
+        d = startdenom,                 //   and denominator d = 2 ^ 48.
+        x = 0;                          //   and no 'extra last byte'.
+    while (n < significance) {          // Fill up all significant digits by
+      n = (n + x) * width;              //   shifting numerator and
+      d *= width;                       //   denominator and generating a
+      x = arc4.g(1);                    //   new least-significant-byte.
+    }
+    while (n >= overflow) {             // To avoid rounding up, before adding
+      n /= 2;                           //   last byte, shift everything
+      d /= 2;                           //   right using integer math until
+      x >>>= 1;                         //   we have exactly the desired bits.
+    }
+    return (n + x) / d;                 // Form the number within [0, 1).
+  };
+
+  prng.int32 = function() { return arc4.g(4) | 0; }
+  prng.quick = function() { return arc4.g(4) / 0x100000000; }
+  prng.double = prng;
+
+  // Mix the randomness into accumulated entropy.
+  mixkey(tostring(arc4.S), pool);
+
+  // Calling convention: what to return as a function of prng, seed, is_math.
+  return (options.pass || callback ||
+      function(prng, seed, is_math_call, state) {
+        if (state) {
+          // Load the arc4 state from the given state if it has an S array.
+          if (state.S) { copy(state, arc4); }
+          // Only provide the .state method if requested via options.state.
+          prng.state = function() { return copy(arc4, {}); }
+        }
+
+        // If called as a method of Math (Math.seedrandom()), mutate
+        // Math.random because that is how seedrandom.js has worked since v1.0.
+        if (is_math_call) { math[rngname] = prng; return seed; }
+
+        // Otherwise, it is a newer calling convention, so return the
+        // prng directly.
+        else return prng;
+      })(
+  prng,
+  shortseed,
+  'global' in options ? options.global : (this == math),
+  options.state);
+}
+math['seed' + rngname] = seedrandom;
+
+//
+// ARC4
+//
+// An ARC4 implementation.  The constructor takes a key in the form of
+// an array of at most (width) integers that should be 0 <= x < (width).
+//
+// The g(count) method returns a pseudorandom integer that concatenates
+// the next (count) outputs from ARC4.  Its return value is a number x
+// that is in the range 0 <= x < (width ^ count).
+//
+function ARC4(key) {
+  var t, keylen = key.length,
+      me = this, i = 0, j = me.i = me.j = 0, s = me.S = [];
+
+  // The empty key [] is treated as [0].
+  if (!keylen) { key = [keylen++]; }
+
+  // Set up S using the standard key scheduling algorithm.
+  while (i < width) {
+    s[i] = i++;
+  }
+  for (i = 0; i < width; i++) {
+    s[i] = s[j = mask & (j + key[i % keylen] + (t = s[i]))];
+    s[j] = t;
+  }
+
+  // The "g" method returns the next (count) outputs as one number.
+  (me.g = function(count) {
+    // Using instance members instead of closure state nearly doubles speed.
+    var t, r = 0,
+        i = me.i, j = me.j, s = me.S;
+    while (count--) {
+      t = s[i = mask & (i + 1)];
+      r = r * width + s[mask & ((s[i] = s[j = mask & (j + t)]) + (s[j] = t))];
+    }
+    me.i = i; me.j = j;
+    return r;
+    // For robust unpredictability, the function call below automatically
+    // discards an initial batch of values.  This is called RC4-drop[256].
+    // See http://google.com/search?q=rsa+fluhrer+response&btnI
+  })(width);
+}
+
+//
+// copy()
+// Copies internal state of ARC4 to or from a plain object.
+//
+function copy(f, t) {
+  t.i = f.i;
+  t.j = f.j;
+  t.S = f.S.slice();
+  return t;
+};
+
+//
+// flatten()
+// Converts an object tree to nested arrays of strings.
+//
+function flatten(obj, depth) {
+  var result = [], typ = (typeof obj), prop;
+  if (depth && typ == 'object') {
+    for (prop in obj) {
+      try { result.push(flatten(obj[prop], depth - 1)); } catch (e) {}
+    }
+  }
+  return (result.length ? result : typ == 'string' ? obj : obj + '\0');
+}
+
+//
+// mixkey()
+// Mixes a string seed into a key that is an array of integers, and
+// returns a shortened string seed that is equivalent to the result key.
+//
+function mixkey(seed, key) {
+  var stringseed = seed + '', smear, j = 0;
+  while (j < stringseed.length) {
+    key[mask & j] =
+      mask & ((smear ^= key[mask & j] * 19) + stringseed.charCodeAt(j++));
+  }
+  return tostring(key);
+}
+
+//
+// autoseed()
+// Returns an object for autoseeding, using window.crypto and Node crypto
+// module if available.
+//
+function autoseed() {
+  try {
+    var out;
+    if (nodecrypto && (out = nodecrypto.randomBytes)) {
+      // The use of 'out' to remember randomBytes makes tight minified code.
+      out = out(width);
+    } else {
+      out = new Uint8Array(width);
+      (global.crypto || global.msCrypto).getRandomValues(out);
+    }
+    return tostring(out);
+  } catch (e) {
+    var browser = global.navigator,
+        plugins = browser && browser.plugins;
+    return [+new Date, global, plugins, global.screen, tostring(pool)];
+  }
+}
+
+//
+// tostring()
+// Converts an array of charcodes to a string
+//
+function tostring(a) {
+  return String.fromCharCode.apply(0, a);
+}
+
+//
+// When seedrandom.js is loaded, we immediately mix a few bits
+// from the built-in RNG into the entropy pool.  Because we do
+// not want to interfere with deterministic PRNG state later,
+// seedrandom will not call math.random on its own again after
+// initialization.
+//
+mixkey(math.random(), pool);
+
+//
+// Nodejs and AMD support: export the implementation as a module using
+// either convention.
+//
+if ((typeof module) == 'object' && module.exports) {
+  module.exports = seedrandom;
+  // When in node.js, try using crypto package for autoseeding.
+  try {
+    nodecrypto = require('crypto');
+  } catch (ex) {}
+} else if ((typeof define) == 'function' && define.amd) {
+  define(function() { return seedrandom; });
+}
+
+// End anonymous scope, and pass initial values.
+})(
+  [],     // pool: entropy pool starts empty
+  Math    // math: package containing random, pow, and seedrandom
+);
+
+},{"crypto":1}],44:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -4991,7 +5941,7 @@ exports.connect = lookup;
 exports.Manager = require('./manager');
 exports.Socket = require('./socket');
 
-},{"./manager":37,"./socket":39,"./url":40,"debug":12,"socket.io-parser":42}],37:[function(require,module,exports){
+},{"./manager":45,"./socket":47,"./url":48,"debug":12,"socket.io-parser":50}],45:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5566,7 +6516,7 @@ Manager.prototype.onreconnect = function () {
   this.emitAll('reconnect', attempt);
 };
 
-},{"./on":38,"./socket":39,"backo2":6,"component-bind":9,"component-emitter":10,"debug":12,"engine.io-client":14,"indexof":29,"socket.io-parser":42}],38:[function(require,module,exports){
+},{"./on":46,"./socket":47,"backo2":6,"component-bind":9,"component-emitter":10,"debug":12,"engine.io-client":14,"indexof":29,"socket.io-parser":50}],46:[function(require,module,exports){
 
 /**
  * Module exports.
@@ -5592,7 +6542,7 @@ function on (obj, ev, fn) {
   };
 }
 
-},{}],39:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6012,7 +6962,7 @@ Socket.prototype.compress = function (compress) {
   return this;
 };
 
-},{"./on":38,"component-bind":9,"component-emitter":10,"debug":12,"parseqs":34,"socket.io-parser":42,"to-array":44}],40:[function(require,module,exports){
+},{"./on":46,"component-bind":9,"component-emitter":10,"debug":12,"parseqs":34,"socket.io-parser":50,"to-array":52}],48:[function(require,module,exports){
 (function (global){
 
 /**
@@ -6091,7 +7041,7 @@ function url (uri, loc) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"debug":12,"parseuri":35}],41:[function(require,module,exports){
+},{"debug":12,"parseuri":35}],49:[function(require,module,exports){
 (function (global){
 /*global Blob,File*/
 
@@ -6236,7 +7186,7 @@ exports.removeBlobs = function(data, callback) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./is-buffer":43,"isarray":31}],42:[function(require,module,exports){
+},{"./is-buffer":51,"isarray":31}],50:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6638,7 +7588,7 @@ function error() {
   };
 }
 
-},{"./binary":41,"./is-buffer":43,"component-emitter":10,"debug":12,"has-binary2":27}],43:[function(require,module,exports){
+},{"./binary":49,"./is-buffer":51,"component-emitter":10,"debug":12,"has-binary2":27}],51:[function(require,module,exports){
 (function (global){
 
 module.exports = isBuf;
@@ -6655,7 +7605,7 @@ function isBuf(obj) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],44:[function(require,module,exports){
+},{}],52:[function(require,module,exports){
 module.exports = toArray
 
 function toArray(list, index) {
@@ -6670,7 +7620,7 @@ function toArray(list, index) {
     return array
 }
 
-},{}],45:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
 'use strict';
 
 var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
@@ -6740,7 +7690,7 @@ yeast.encode = encode;
 yeast.decode = decode;
 module.exports = yeast;
 
-},{}],46:[function(require,module,exports){
+},{}],54:[function(require,module,exports){
 var global = require('./global');
 
 function DrawTetrisGame(p) {
@@ -6754,7 +7704,7 @@ function DrawTetrisGame(p) {
 DrawTetrisGame.prototype.drawGame = function (game) {
     this.drawNextBlock(game.block.nextBlock, game.startX, 0);
     this.drawHoldBlock(game.block.holdBlock, game.startX, 0);
-    this.drawTetrisBoard(game.board, game.startX, 0);
+    this.drawTetrisBoard(game.getBoard(), game.startX, 0);
     this.drawScore(game.score, game.startX, 0);
     this.drawState(game.isPause, game.isGameOver, game.startX, 0);
 };
@@ -6772,8 +7722,11 @@ DrawTetrisGame.prototype.drawBlock = function (board, rowNum, colNum, Sx, Sy) {
             /*뭔가 for문안에서 push pop이 발생하니 느릴 것 같다.*/
             self.p5Object.push();
             self.p5Object.translate(Sx + j * global.BLOCK_WIDTH, Sy + i * global.BLOCK_HEIGHT);
-            var colorType = '#000000';
+            var colorType;
             switch (board[i][j]) {
+                case 0:
+                    colorType = '#000000';
+                    break;
                 case 11:
                     colorType = '#ed0345';
                     break;
@@ -6795,7 +7748,11 @@ DrawTetrisGame.prototype.drawBlock = function (board, rowNum, colNum, Sx, Sy) {
                 case 17:
                     colorType = '#a12a5e';
                     break;
+                default:
+                    colorType = '#000000';
+                    break;
             }
+
             self.p5Object.fill(self.p5Object.color(colorType));
             /*black*/
             self.p5Object.rect(0, 0, global.BLOCK_WIDTH, global.BLOCK_HEIGHT);
@@ -6858,7 +7815,7 @@ DrawTetrisGame.prototype.drawState = function (isPaused, isGameOver, Sx, Sy) {
 
 module.exports = DrawTetrisGame;
 
-},{"./global":47}],47:[function(require,module,exports){
+},{"./global":55}],55:[function(require,module,exports){
 module.exports = {
     host: "127.0.0.1",
     port: 3000,
@@ -6871,7 +7828,7 @@ module.exports = {
     KEY_SHIFT : 16
 	};
 
-},{}],48:[function(require,module,exports){
+},{}],56:[function(require,module,exports){
 var io = require('socket.io-client');
 var global = require('./global');
 var Main = require('./main');
@@ -6886,60 +7843,99 @@ function ClientManager() {
     if (!(self instanceof ClientManager)) new ClientManager();
 
     self.main = new Main();
+
     self.socket = io({
         query: "type=tetris"
     });
 
-    self.setupSocket(self.socket);
+    self.setupSocket();
 }
 
-ClientManager.prototype.setupSocket = function (socket) {
+ClientManager.prototype.setupSocket = function () {
     var self = this;
 
-    socket.emit('respawn');
+    self.socket.emit('join');
 
     // Handle error.
-    socket.on('connect_failed', function () {
-        socket.close();
+    self.socket.on('connect_failed', function () {
+        self.socket.close();
         global.disconnected = true;
     });
 
-    socket.on('disconnect', function () {
-        socket.close();
+    self.socket.on('disconnect', function () {
+        self.socket.close();
         global.disconnected = true;
     });
 
     // Handle connection.
-    socket.on('welcome', function (playerSettings) {
-        socket.emit('gotit');
-        self.main.startGame(playerSettings);
+    self.socket.on('welcome', function (message) {
+        self.roomId = message.roomId;
+        self.socket.emit('gotit');
+        self.main.startGame(message);
+        //self.socket.on('game packet', self.socketHandler.bind(self));
     });
 
-    socket.on('playerJoin', function (data) {
+    self.socket.on('activate start button', function () {
+        // main의 대기화면 객체의 start button을 활성화 한다.
+        console.log("hihihihihi");
+    });
+
+    self.main.on('start button down', function (param) {
+        //main의 버튼이 눌렸음을 알린다
+    });
+
+    self.socket.on('start', function (param) {
+        // 버튼이 눌렸을 때 client 전체에 start 시그널이 발생한다 각 클라이언트는 동시에 게임을 시작한다
+    });
+
+    self.socket.on('playerJoin', function (data) {
+        // player가 입장했을 대 otherplayer를 생성하고 데이터를 구성한다
         console.log('connected in server :' + data.name);
     });
+    // input을 서버로 보낸다
+    self.main.on('Key_Pressed', function (data) {
 
-    self.main.on('Key_Pressed', function (key) {
-        socket.emit('Key_Pressed', key);
-    });
-
-    socket.on('playerDisconnect', function (data) {
-        console.log('Disconnected in server : ' + data.name);
-    });
-
-
-    socket.on('serverTellPlayerMove', function (playerSettings) {
-        self.main.emit('redraw', playerSettings);
-        //canvas.emit('drawOtherUsers',playerSettings) ;
-    });
-
-    socket.on('users', function (users) {
-        self.main.emit('drawUsers', users);
+        self.socket.emit('game packet', {
+            input: data.keyInput,
+            room_id: self.roomId,
+            clientId: self.socket.id
+        });
     });
 };
 
 
-},{"./global":47,"./main":49,"socket.io-client":36}],49:[function(require,module,exports){
+ClientManager.prototype.socketHandler = function (message) {
+    var self = this;
+    // 서버에 어떤 클라이언트가 입장했을 때
+    if (message.type === 0) {
+        if (message.id == self.socket.id) return;
+        self.main.game.addPlayer(message);
+
+        // 게임 플레이중일때 서버에서 처리한 input message
+    } else if (message.type === 5) {
+
+        if (self.main.game.gameState !== 1) return;
+        //game에도 message queue를 만들어야 한다
+        self.main.game.messages.push(message);
+
+    } else if (message.type === 6) {
+
+        var length = message.otherPlayers.length;
+        var localPlayerId = self.socket.id;
+        var otherPlayers = message.otherPlayers;
+
+        for (var i = 0; i < length; i++) {
+            if (otherPlayers[i].id == localPlayerId) continue;
+
+            self.main.game.addPlayer({order: otherPlayers[i].order, id: otherPlayers[i].id});
+        }
+
+        console.log(self.main.game.players)
+    }
+};
+
+
+},{"./global":55,"./main":57,"socket.io-client":44}],57:[function(require,module,exports){
 var DrawTetrisGame = require('./drawTetrisGame');
 var TetrisGameLogic = require('./tetrisGameLogic');
 var EventEmitter = require('events').EventEmitter;
@@ -6965,48 +7961,46 @@ function Main() {
     self.game = {};
     self.p5Object = null;
 
-    self.on('redraw', function(inputGame) {
-        //self.game = inputGame;
-        //self.p5Object.redraw();
-    });
-
-    self.on('UpdateIsPause', function(pauseData) {
-        //self.game.isPause = pauseData.data;
-        //self.p5Object.redraw();
-    });
-
-    self.on('drawUsers', function(users) {
-        //self.game = users[0];
-        //self.p5Object.redraw();
-    });
-
     self.p5sketch = function(p) {
+
         self.p5Object = p;
         self.drawObj = new DrawTetrisGame(p);
         p.setup = function() {
             p.createCanvas(1500, 850);
             p.textSize(20);
-            p.noLoop();
+            //p.noLoop();
+            p.frameRate(3);
         };
 
         p.draw = function() {
             //if (self.game.find == undefined) return;
             p.clear();
+            // go 함수는 일정 시간 이후에만 처리되도록 해야한다
+            // keyinput뒤에 redraw하니까 key입력이 많아지면 엄청 빠르게 움직인다
+            self.game.processInput();
+
             self.drawObj.drawGame(self.game);
         };
 
         p.keyPressed = function() {
-            var key = self.allowedKeys[p.keyCode]
+            var key = self.allowedKeys[p.keyCode];
             self.game.handleInput(key);
             // 나중에 key를 소켓을 통해 보낸다
+            self.emit('Key_Pressed',{keyInput : key});
             p.redraw();
         };
+
+        p.keyReleased = function(){
+            self.game.handleInput('key_Released');
+            p.redraw();
+        }
     };
 }
 
-Main.prototype.startGame = function () {
+Main.prototype.startGame = function (options) {
     var self = this;
-    self.game = new TetrisGameLogic();
+    self.game = new TetrisGameLogic(options);
+
 
     self.game.intervalHandler = setInterval(
         function () {
@@ -7027,13 +8021,14 @@ Main.prototype.startGame = function () {
 
 
 module.exports = Main;
-},{"./drawTetrisGame":46,"./global":47,"./tetrisGameLogic":51,"events":2,"inherits":30}],50:[function(require,module,exports){
+},{"./drawTetrisGame":54,"./global":55,"./tetrisGameLogic":59,"events":2,"inherits":30}],58:[function(require,module,exports){
 var global = require('../../client/src/global');
+var SeedRandom = require('seedrandom');
 
-function Shape() {
+function Shape(randomSeed) {
     var self = this;
 
-    if (!(self instanceof Shape)) return new Shape();
+    if (!(self instanceof Shape)) return new Shape(randomSeed);
 
     self.BLOCKS = [
         [
@@ -7079,6 +8074,10 @@ function Shape() {
             [0, 0, 0, 0]
         ]
     ];
+
+    self.randomSeed = randomSeed || Date.now();
+    self.random = SeedRandom(self.randomSeed);
+
     self.X = 3;
     self.Y = 0;
     self.currentBlock = self.randomBlock();
@@ -7175,8 +8174,9 @@ Shape.prototype.deleteLine = function (board) {
 
 Shape.prototype.randomBlock = function () {
     var self = this;
+    var index = Math.floor(self.random() * self.BLOCKS.length);
+    return self.BLOCKS[index];
 
-    return self.BLOCKS[Math.floor(Math.random() * self.BLOCKS.length)];
 };
 
 Shape.prototype.clone = function (origin, target) {
@@ -7200,16 +8200,39 @@ Shape.prototype.emptyCheck = function (block) {
 };
 
 module.exports = Shape;
-},{"../../client/src/global":47}],51:[function(require,module,exports){
+},{"../../client/src/global":55,"seedrandom":36}],59:[function(require,module,exports){
 //var global = require('./global');
 var Shape = require('./shape');
-var DrawTetrisGame = require('./drawTetrisGame');
+var EventEmitter = require('events').EventEmitter;
+var inherits = require('inherits');
+
+inherits(TetrisGame, EventEmitter);
 
 /*전체적으로 게임을 진행시키기 위한 데이터와 메소드를 담고있는 객체*/
-function TetrisGame() {
+function TetrisGame(options) {
 
     var self = this;
-    if (!(self instanceof TetrisGame)) return new TetrisGame();
+    if (!(self instanceof TetrisGame)) return new TetrisGame(options);
+
+    self.id = options.clientId || 'offline';
+    self.roomId = options.roomId || 'offline';
+    self.order = options.order || 1;
+
+
+    self.history = [];
+    self.sequenceNumber = 0;
+    self.pendingInputs = [];
+    //space는 밑으로 바로 내려버리는 것 이므로 꾹 누를 필요가 없다
+    //space 처리를 하고 바로 false로 바꾸자
+    //shift도 마찬가지
+    self.key_right = false;
+    self.key_left = false;
+    self.key_up = false;
+    self.key_down = false;
+    self.key_shift = false;
+    self.key_a = false;
+    self.key_s = false;
+    self.key_space = false;
 
     self.intervalHandler = -1;
 
@@ -7217,13 +8240,10 @@ function TetrisGame() {
     self.isPause = false;
     self.holdable = true;
 
-    self.block = new Shape();
+    self.block = new Shape(self.randomSeed);
 
     self.startX = 0;
     self.score = 0;
-    /*id는 각 클라이언트 소켓에 할당된 id로 지정한다.*/
-    self.id = -1;
-
 
     self.board = [];
 
@@ -7236,6 +8256,124 @@ function TetrisGame() {
 
 }
 
+TetrisGame.prototype.processInput = function () {
+
+    var self = this;
+    var input = null;
+
+    if (self.key_left) {
+        self.steerLeft();
+    } else if (self.key_right) {
+        self.steerRight();
+    } else if (self.key_up) {
+        self.rotateRight();
+    } else if (self.key_down) {
+        self.steerDown();
+    }else if (self.key_shift) {
+        self.key_shift = false;
+        self.hold();
+    }else if (self.key_space) {
+        self.key_space = false;
+        self.letFall();
+    }else if (self.key_a) {
+        self.rotateLeft();
+    }else if (self.key_s) {
+        self.rotateRight();
+    } else {
+        return;
+    }
+
+    /*
+    input.sequenceNumber = self.sequenceNumber++;
+    input.clientId = self.id;
+    input.roomId = self.roomId;
+    self.emit('sendInput', input);
+
+
+    self.pendingInputs.push(input);
+    */
+};
+
+TetrisGame.prototype.handleInput = function (key) {
+    var self = this;
+
+    if(self.isGameOver) return;
+
+    var input;
+    switch (key){
+        case 'a':
+            self.key_a = true;
+            break;
+        case 's':
+            self.key_s = true;
+            break;
+        case 'left':
+            self.key_left = true;
+            break;
+        case 'right':
+            self.key_right = true;
+            break;
+        case 'up':
+            self.key_up = true;
+            break;
+        case 'down':
+            self.key_down = true;
+            break;
+        case 'space':
+            self.key_space = true;
+            break;
+        case 'shift':
+            self.key_shift = true;
+            break;
+        case 'key_Released':
+            self.key_right = false;
+            self.key_left = false;
+            self.key_up = false;
+            self.key_down = false;
+            self.key_shift = false;
+            self.key_space = false;
+            self.key_a = false;
+            self.key_s = false;
+            break;
+    }
+};
+/*
+TetrisGame.prototype.pushHistory = function (time, seed, type, message) {
+    var self = this;
+    self.randomSeed = seed;
+    // push action to history log
+    self.history.push({ time: time, owner: self.id, seed: seed, type: type, message: message })
+};
+
+TetrisGame.prototype.syncAction = function(posFrom, posTO, message) {
+    var self = this;
+
+    if(message.inputType === 'move_key'){
+
+    }else if(message.inputType === 'move_interval'){
+
+    }else if(message.inputType === 'rotate'){
+
+    }
+
+
+    posFrom.type = self.jewelMap[posFrom.y][posFrom.x].type
+    posTO.type = self.jewelMap[posTO.y][posTO.x].type
+
+    self.jewelMap[posFrom.y][posFrom.x].type = posTO.type
+    self.jewelMap[posTO.y][posTO.x].type = posFrom.type
+
+    var result = self.processMatch()
+    if (!result.is_matched) {
+        self.jewelMap[posFrom.y][posFrom.x].type = posFrom.type
+        self.jewelMap[posTO.y][posTO.x].type = posTO.type
+        console.warn('client '+ self.id + ' recieved invalidate action');
+    }else {
+        self.pushHistory(message.time, message.randomSeed, message.type, message.message)
+    }
+    return result
+}
+*/
 /*interval 함수의 인자로 쓰일 함수이다. 시간 간격 이후에 할 일을 정의한다.
 1. 현재 Gameover 상태인지 체크한다.
 2. 현재 블록이 내려갔을때 겹치는지 체크한다.
@@ -7246,37 +8384,6 @@ function TetrisGame() {
 
 3.  겹치지 않는다면 블록을 한 칸 내린다.
 */
-
-TetrisGame.prototype.handleInput = function (key) {
-    var self = this;
-
-    switch (key){
-        case 'a':
-            self.rotateLeft();
-            break;
-        case 's':
-            self.rotateRight();
-            break;
-        case 'left':
-            self.steerLeft();
-            break;
-        case 'right':
-            self.steerRight();
-            break;
-        case 'up':
-            self.rotateRight();
-            break;
-        case 'down':
-            self.steerDown();
-            break;
-        case 'space':
-            self.letFall();
-            break;
-        case 'shift':
-            self.hold();
-            break;
-    }
-};
 
 TetrisGame.prototype.go = function () {
     var self = this;
@@ -7295,6 +8402,7 @@ TetrisGame.prototype.go = function () {
             self.setIsGameover(true);
         } else {
             self.block.currentBlock = self.block.nextBlock;
+
             self.block.nextBlock = self.block.randomBlock();
             self.block.X = 3;
             self.block.Y = 0;
@@ -7375,6 +8483,7 @@ TetrisGame.prototype.hold = function () {
     if (self.block.emptyCheck(self.block.holdBlock)) {
         self.block.clone(self.block.currentBlock, self.block.holdBlock);
         self.block.clone(self.block.nextBlock, self.block.currentBlock);
+        var result
         self.block.nextBlock = self.block.randomBlock();
     } else {
         var temp = [];
@@ -7538,4 +8647,4 @@ TetrisGame.prototype.getGameData = function () {
 
 module.exports = TetrisGame;
 
-},{"./drawTetrisGame":46,"./shape":50}]},{},[48]);
+},{"./shape":58,"events":2,"inherits":30}]},{},[56]);

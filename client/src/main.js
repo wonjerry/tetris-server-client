@@ -23,48 +23,50 @@ function Main() {
     self.game = {};
     self.p5Object = null;
 
-    self.on('redraw', function(inputGame) {
-        //self.game = inputGame;
-        //self.p5Object.redraw();
-    });
-
-    self.on('UpdateIsPause', function(pauseData) {
-        //self.game.isPause = pauseData.data;
-        //self.p5Object.redraw();
-    });
-
-    self.on('drawUsers', function(users) {
-        //self.game = users[0];
-        //self.p5Object.redraw();
-    });
-
     self.p5sketch = function(p) {
+
         self.p5Object = p;
         self.drawObj = new DrawTetrisGame(p);
         p.setup = function() {
             p.createCanvas(1500, 850);
             p.textSize(20);
-            p.noLoop();
+            //p.noLoop();
+            p.frameRate(3);
         };
 
         p.draw = function() {
             //if (self.game.find == undefined) return;
             p.clear();
+            // go 함수는 일정 시간 이후에만 처리되도록 해야한다
+            // keyinput뒤에 redraw하니까 key입력이 많아지면 엄청 빠르게 움직인다
+            self.game.processInput();
+
             self.drawObj.drawGame(self.game);
         };
 
         p.keyPressed = function() {
-            var key = self.allowedKeys[p.keyCode]
+            var key = self.allowedKeys[p.keyCode];
             self.game.handleInput(key);
             // 나중에 key를 소켓을 통해 보낸다
+            self.emit('Key_Pressed',{keyInput : key});
             p.redraw();
         };
+
+        p.keyReleased = function(){
+            self.game.handleInput('key_Released');
+            p.redraw();
+        }
     };
 }
 
-Main.prototype.startGame = function () {
+Main.prototype.startGame = function (options) {
     var self = this;
-    self.game = new TetrisGameLogic();
+    self.game = new TetrisGameLogic(options);
+
+    self.game.on('sendInput',function (input) {
+        self.emit('Key_Pressed',{keyInput : key});
+    });
+
 
     self.game.intervalHandler = setInterval(
         function () {
