@@ -1,4 +1,4 @@
-//var global = require('./global');
+var global = require('./global');
 var Shape = require('./shape');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
@@ -18,10 +18,13 @@ function TetrisGame(options) {
 
     self.history = [];
     self.sequenceNumber = 0;
+    // 클라이언트에서만 사용하는 배열
     self.pendingInputs = [];
-    //space는 밑으로 바로 내려버리는 것 이므로 꾹 누를 필요가 없다
-    //space 처리를 하고 바로 false로 바꾸자
-    //shift도 마찬가지
+    self.messages = [];
+    // 서버에서만 사용하는 배열
+    self.processedInputs = [];
+
+    // key flags
     self.key_right = false;
     self.key_left = false;
     self.key_up = false;
@@ -37,7 +40,7 @@ function TetrisGame(options) {
     self.isPause = false;
     self.holdable = true;
 
-    self.block = new Shape(self.randomSeed);
+    self.block = new Shape(options.randomSeed);
 
     self.startX = 0;
     self.score = 0;
@@ -52,52 +55,161 @@ function TetrisGame(options) {
     }
 
 }
+/////////
+TetrisGame.prototype.processServerMessages = function () {
+    var self = this;
+
+    while (self.messages.length !== 0) {
+
+        var message = self.messages.splice(0, 1);
+        var worldStates = message[0].worldState;
+
+        while (worldStates.length !== 0) {
+
+            var state = (worldStates.splice(0, 1))[0];
+
+            var player = null;
+            // 들어온 state가 자기 자신에 관한 것 일 때
+
+            if (self.player.id === state.playerId) {
+                // 여기서 받은 x ,y는 서버측의 player의 position이다
+                player = self.players[0];
+                player.col = state.x;
+                player.row = state.y;
+
+                var j = 0;
+                while (j < self.pendingInputs.length) {
+                    var input = self.pendingInputs[j];
+
+                    if (input.sequenceNumber <= state.lastProcessedInput) {
+                        // Already processed. Its effect is already taken into account into the world update
+                        // we just got, so we can drop it.
+                        self.pendingInputs.splice(j, 1);
+                    } else {
+                        // Not processed by the server yet. Re-apply it.
+                        //input에 있는 x,y의 delta 값이다
+                        player.applyInput(input.x,input.y);
+                        j++;
+                    }
+                }
+
+                // 디른 클라이언트일 때
+            } else {
+
+                self.players.forEach(function (ele) {
+                    if (ele.id === state.playerId) {
+                        //console.log(state.x);
+                        ele.col = state.x;
+                        ele.row = state.y;
+                    }
+
+                });
+
+                //console.log(self.players)
+            }
+
+
+        }
+
+    }
+};
 
 TetrisGame.prototype.processInput = function () {
 
     var self = this;
+
     var input = null;
 
     if (self.key_left) {
-        self.steerLeft();
+        input = {
+            type : 'move',
+            blockType : self.block.currentBlock.type,
+            x : -1,
+            y : 0
+        };
     } else if (self.key_right) {
-        self.steerRight();
-    } else if (self.key_up) {
-        self.rotateRight();
+        input = {
+            type : 'move',
+            blockType : self.block.currentBlock.type,
+            x : 1,
+            y : 0
+        };
     } else if (self.key_down) {
-        self.steerDown();
-    }else if (self.key_shift) {
+        input = {
+            type : 'move',
+            blockType : self.block.currentBlock.type,
+            x : 0,
+            y : 1
+        };
+    } else if (self.key_up) {
+        input = {
+            type : 'rotate',
+            blockType : self.block.currentBlock.type,
+            direction : 'right'
+        };
+    } else if (self.key_a) {
+        input = {
+            type : 'rotate',
+            blockType : self.block.currentBlock.type,
+            direction : 'left'
+        };
+    } else if (self.key_s) {
+        input = {
+            type : 'rotate',
+            blockType : self.block.currentBlock.type,
+            direction : 'right'
+        };
+    } else if (self.key_shift) {
         self.key_shift = false;
+        input = {
+            type : 'hold',
+            currentBlockType : self.block.currentBlock.type,
+            nextBlockType : self.block.currentBlock.type,
+            holdBlockType : self.block.currentBlock.type
+        };
         self.hold();
-    }else if (self.key_space) {
+    } else if (self.key_space) {
         self.key_space = false;
-        self.letFall();
-    }else if (self.key_a) {
-        self.rotateLeft();
-    }else if (self.key_s) {
-        self.rotateRight();
+        var deltaY = self.letFall();
+        input = {
+            type : 'letFall',
+            blockType : self.block.currentBlock.type,
+            x:0,
+            y:deltaY
+        };
     } else {
         return;
     }
 
-    /*
+    // 만양 회전이나 이동이 불가능 할 때는 input data를 보내지 않는다.
+    // 서버에서도 이걸로 validate 검사를 할 수 있을 듯 하다
+    var moveable = false;
+
+    if(input.type === 'move'){
+        moveable = self.move(input.y, input.x, self.block.currentBlock.array);
+    }else if(input.type === 'rotate'){
+        moveable = self.rotate(input.direction);
+    }
+
+    if(!moveable) return;
+
     input.sequenceNumber = self.sequenceNumber++;
     input.clientId = self.id;
     input.roomId = self.roomId;
+
     self.emit('sendInput', input);
 
 
     self.pendingInputs.push(input);
-    */
+
 };
 
 TetrisGame.prototype.handleInput = function (key) {
     var self = this;
 
-    if(self.isGameOver) return;
+    if (self.isGameOver) return;
 
-    var input;
-    switch (key){
+    switch (key) {
         case 'a':
             self.key_a = true;
             break;
@@ -134,6 +246,36 @@ TetrisGame.prototype.handleInput = function (key) {
             break;
     }
 };
+
+TetrisGame.prototype.syncAction = function(input) {
+    var self = this;
+
+    var validate = false;
+
+    switch(input.type){
+        case 'move':
+            validate = self.move(input.y,input.x,self.block.currentBlock.array);
+            break;
+        case 'move_interval':
+            validate = self.go();
+            break;
+        case 'rotate':
+            validate = self.rotate(input.direction);
+            break;
+        case 'letFall':
+            var delta = 0;
+            delta = self.letFall();
+
+            validate = (delta === input.deltaY);
+            break;
+    }
+
+    self.processedInputs.push(input);
+    if(!validate) console.warn('invalid event!!!!!!!');
+
+};
+
+
 /*
 TetrisGame.prototype.pushHistory = function (time, seed, type, message) {
     var self = this;
@@ -142,34 +284,7 @@ TetrisGame.prototype.pushHistory = function (time, seed, type, message) {
     self.history.push({ time: time, owner: self.id, seed: seed, type: type, message: message })
 };
 
-TetrisGame.prototype.syncAction = function(posFrom, posTO, message) {
-    var self = this;
 
-    if(message.inputType === 'move_key'){
-
-    }else if(message.inputType === 'move_interval'){
-
-    }else if(message.inputType === 'rotate'){
-
-    }
-
-
-    posFrom.type = self.jewelMap[posFrom.y][posFrom.x].type
-    posTO.type = self.jewelMap[posTO.y][posTO.x].type
-
-    self.jewelMap[posFrom.y][posFrom.x].type = posTO.type
-    self.jewelMap[posTO.y][posTO.x].type = posFrom.type
-
-    var result = self.processMatch()
-    if (!result.is_matched) {
-        self.jewelMap[posFrom.y][posFrom.x].type = posFrom.type
-        self.jewelMap[posTO.y][posTO.x].type = posTO.type
-        console.warn('client '+ self.id + ' recieved invalidate action');
-    }else {
-        self.pushHistory(message.time, message.randomSeed, message.type, message.message)
-    }
-    return result
-}
 */
 /*interval 함수의 인자로 쓰일 함수이다. 시간 간격 이후에 할 일을 정의한다.
 1. 현재 Gameover 상태인지 체크한다.
@@ -189,75 +304,123 @@ TetrisGame.prototype.go = function () {
         return false;
     }
 
-    if (self.block.intersectCheck(self.block.Y + 1, self.block.X, self.block.currentBlock, self.board)) {
-        self.board = self.block.applyBlock(self.block.Y, self.block.X, self.block.currentBlock, self.board);
-        var r = self.block.deleteLine(self.board);
-        self.board = r.board;
-        self.score += r.deletedLineCount * r.deletedLineCount * 10;
-        self.setHoldable(true);
-        if (self.block.intersectCheck(0, 3, self.block.nextBlock, self.board)) {
+    if (self.intersectCheck(self.block.Y + 1, self.block.X, self.block.currentBlock.array)) {
+        self.board = self.applyCurrentBlockToBoard(self.block.Y, self.block.X);
+
+        self.deleteLine();
+        self.holdable = true;
+
+        if (self.intersectCheck(0, 3, self.block.nextBlock.array)) {
             self.setIsGameover(true);
         } else {
-            self.block.currentBlock = self.block.nextBlock;
-
-            self.block.nextBlock = self.block.randomBlock();
-            self.block.X = 3;
-            self.block.Y = 0;
+            self.block.changeCurrentToNext();
         }
-    } else {
-        self.block.Y += 1;
 
+    } else {
+        self.block.goDown();
     }
     return true;
 };
 
-TetrisGame.prototype.steerLeft = function () {
+TetrisGame.prototype.calculateAndSetScore = function (deletedLineNum) {
     var self = this;
 
-    if (!self.block.intersectCheck(self.block.Y, self.block.X - 1, self.block.currentBlock, self.board)) {
-        self.block.X -= 1;
+    self.score = deletedLineNum * deletedLineNum * 10;
+};
+
+
+TetrisGame.prototype.intersectCheck = function (y, x, block) {
+    var self = this;
+    var board = self.board;
+
+    for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < 4; j++) {
+            if (block[i][j]) {
+                if (i + y >= global.BOARD_HEIGHT || j + x >= global.BOARD_WIDTH || j + x < 0 || board[y + i][x + j]) {
+                    return true;
+                    /* 움직였을 때 어떤 물체 또는 board 끝에 겹침을 뜻함*/
+                }
+            }
+        }
+    }
+    return false;
+};
+
+TetrisGame.prototype.applyCurrentBlockToBoard = function (y, x) {
+    var self = this;
+    var board = self.board;
+    var block = self.block.currentBlock.array;
+
+    var newBoard = [];
+
+    for (var i = 0; i < global.BOARD_HEIGHT; i++) {
+        newBoard[i] = board[i].slice();
+    }
+
+    for (var i = 0; i < 4; i++) {
+        for (var j = 0; j < 4; j++) {
+            if (block[i][j]) {
+                newBoard[i + y][j + x] = block[i][j];
+            }
+        }
+    }
+    return newBoard;
+};
+
+TetrisGame.prototype.deleteLine = function () {
+    var self = this;
+    var board = self.board;
+
+    var newBoard = [];
+    var count = global.BOARD_HEIGHT;
+    for (var i = global.BOARD_HEIGHT; i-- > 0;) {
+        for (var j = 0; j < global.BOARD_WIDTH; j++) {
+            if (!board[i][j]) {
+                /* 0인 성분이 있으면 한줄이 다 안 채워진 것이므로 붙여넣기 해 준다.*/
+                /*--count로 아래부터 새로운 board를 채워주는 이유는 맨 아래줄부터 1로 채워진 줄이 있다면 자동적으로
+                새로운 board에는 추가되지 않기 때문이다. 이 이후에 맨위부터 count까지는 0으로 채워 주어야 한다.*/
+                newBoard[--count] = board[i].slice();
+                break;
+            }
+        }
+    }
+
+    for (var i = 0; i < count; i++) {
+        newBoard[i] = [];
+        for (var j = 0; j < global.BOARD_WIDTH; j++) {
+            newBoard[i][j] = 0;
+        }
+    }
+
+    self.board = newBoard;
+    self.calculateAndSetScore(count);
+};
+
+
+TetrisGame.prototype.move = function (dy, dx, inputBlock) {
+    var self = this;
+
+    if (!self.intersectCheck(self.block.Y + dy, self.block.X + dx, inputBlock)) {
+        self.block.X += dx;
+        self.block.Y += dy;
         return true;
     }
     return false;
 };
 
-TetrisGame.prototype.steerRight = function () {
+TetrisGame.prototype.rotate = function (direction) {
     var self = this;
 
-    if (!self.block.intersectCheck(self.block.Y, self.block.X + 1, self.block.currentBlock, self.board)) {
-        self.block.X += 1;
-        return true;
+    var newBlock;
+
+    if (direction === 'left') {
+        newBlock = self.block.rotateLeft();
+    } else if (direction === 'right') {
+        newBlock = self.block.rotateRight();
     }
-    return false;
-};
 
-TetrisGame.prototype.steerDown = function () {
-    var self = this;
-
-    if (!self.block.intersectCheck(self.block.Y + 1, self.block.X, self.block.currentBlock, self.board)) {
-        self.block.Y += 1;
-        return true;
-    }
-    return false;
-};
-
-TetrisGame.prototype.rotateLeft = function () {
-    var self = this;
-
-    var newBlock = self.block.rotateLeft(self.block.currentBlock);
-    if (!self.block.intersectCheck(self.block.Y, self.block.X, newBlock, self.board)) {
-        self.block.currentBlock = newBlock;
-        return true;
-    }
-    return false;
-};
-
-TetrisGame.prototype.rotateRight = function () {
-    var self = this;
-
-    var newBlock = self.block.rotateRight(self.block.currentBlock);
-    if (!self.block.intersectCheck(self.block.Y, self.block.X, newBlock, self.board)) {
-        self.block.currentBlock = newBlock;
+    if (!self.intersectCheck(self.block.Y, self.block.X, newBlock)) {
+        self.block.setCurrentBlock(newBlock);
         return true;
     }
     return false;
@@ -265,37 +428,22 @@ TetrisGame.prototype.rotateRight = function () {
 
 TetrisGame.prototype.letFall = function () {
     var self = this;
-
-    while (!self.block.intersectCheck(self.block.Y + 1, self.block.X, self.block.currentBlock, self.board)) {
-        self.block.Y += 1;
+    var deltaY = 0;
+    while (self.move(1, 0, self.block.currentBlock.array)) {
+        deltaY++;
     }
     self.go();
+
+    return deltaY;
 };
 
 TetrisGame.prototype.hold = function () {
     var self = this;
 
+    if (!self.holdable) return;
+
     self.holdable = false;
-    /* hold블록이 비어있으면 currentBlock에 nextblock을 넣어줘야 한다.*/
-    if (self.block.emptyCheck(self.block.holdBlock)) {
-        self.block.clone(self.block.currentBlock, self.block.holdBlock);
-        self.block.clone(self.block.nextBlock, self.block.currentBlock);
-        var result
-        self.block.nextBlock = self.block.randomBlock();
-    } else {
-        var temp = [];
-        for (var i = 0; i < 4; i++) {
-            temp[i] = [];
-        }
-
-        self.block.clone(self.block.holdBlock, temp);
-        self.block.clone(self.block.currentBlock, self.block.holdBlock);
-        self.block.clone(temp, self.block.currentBlock);
-    }
-
-    self.block.X = 3;
-    self.block.Y = 0;
-
+    self.block.hold();
 };
 
 TetrisGame.prototype.getIntervalHandler = function () {
@@ -308,36 +456,23 @@ TetrisGame.prototype.setIntervalHandler = function (ih) {
     var self = this;
 
     self.intervalHandler = ih;
-}
-
-TetrisGame.prototype.getId = function () {
-    var self = this;
-
-    return self.id;
-};
-
-TetrisGame.prototype.setId = function (id) {
-    var self = this;
-
-    self.id = id;
 };
 
 TetrisGame.prototype.getId = function () {
     var self = this;
 
     return self.id;
-};
-
-TetrisGame.prototype.setStartX = function (sx) {
-    var self = this;
-
-    self.startX = sx;
 };
 
 TetrisGame.prototype.getStartX = function () {
     var self = this;
 
     return self.startX;
+};
+
+TetrisGame.prototype.getOrder = function () {
+    var self = this;
+    return self.order;
 }
 
 TetrisGame.prototype.getBlockX = function () {
@@ -370,12 +505,6 @@ TetrisGame.prototype.setIsGameover = function (bool) {
     self.isGameOver = bool;
 };
 
-TetrisGame.prototype.setIsPause = function (bool) {
-    var self = this;
-
-    self.isPause = bool;
-};
-
 TetrisGame.prototype.getScore = function () {
     var self = this;
 
@@ -384,25 +513,20 @@ TetrisGame.prototype.getScore = function () {
 TetrisGame.prototype.getCurrentBlock = function () {
     var self = this;
 
-    return self.block.currentBlock;
+    return self.block.currentBlock.array;
 };
 
 TetrisGame.prototype.getNextBlock = function () {
     var self = this;
 
-    return self.block.nextBlock;
+    return self.block.nextBlock.array;
 };
 
-TetrisGame.prototype.setHoldBlock = function (input) {
-    var self = this;
-
-    self.block.holdBlock = input;
-};
 
 TetrisGame.prototype.getHoldBlock = function () {
     var self = this;
 
-    return self.block.holdBlock;
+    return self.block.holdBlock.array;
 };
 
 TetrisGame.prototype.getHoldable = function () {
@@ -411,21 +535,15 @@ TetrisGame.prototype.getHoldable = function () {
     return self.holdable;
 };
 
-TetrisGame.prototype.setHoldable = function (input) {
-    var self = this;
-
-    self.holdable = input;
-};
-
 TetrisGame.prototype.getBoard = function () {
     var self = this;
 
-    return self.block.applyBlock(self.block.Y, self.block.X, self.block.currentBlock, self.board);
+    return self.applyCurrentBlockToBoard(self.block.Y, self.block.X);
 };
 
 TetrisGame.prototype.getGameData = function () {
     var self = this;
-
+    /*
     return {
         id: self.id,
         startX: self.startX,
@@ -440,6 +558,7 @@ TetrisGame.prototype.getGameData = function () {
         holdBlock: self.getHoldBlock(),
         board: self.getBoard()
     };
+    */
 };
 
 module.exports = TetrisGame;

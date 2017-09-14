@@ -62,13 +62,9 @@ ClientManager.prototype.setupSocket = function () {
         console.log('connected in server :' + data.name);
     });
     // input을 서버로 보낸다
-    self.main.on('Key_Pressed', function (data) {
+    self.main.on('Key_Pressed', function (input) {
 
-        self.socket.emit('game packet', {
-            input: data.keyInput,
-            room_id: self.roomId,
-            clientId: self.socket.id
-        });
+        self.socket.emit('game packet', input);
     });
 };
 
@@ -83,7 +79,7 @@ ClientManager.prototype.socketHandler = function (message) {
         // 게임 플레이중일때 서버에서 처리한 input message
     } else if (message.type === 5) {
 
-        if (self.main.game.gameState !== 1) return;
+        //if (self.main.game.gameState !== 1) return;
         //game에도 message queue를 만들어야 한다
         self.main.game.messages.push(message);
 

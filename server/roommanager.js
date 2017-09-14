@@ -31,7 +31,7 @@ RoomManager.prototype.requestGameRoom = function (socket) {
 
             var options = {
                 clientId: socket.id,
-                roomId: gameroom.room_id,
+                roomId: gameroom.roomId,
                 randomSeed: Math.random().toString(36).substr(2),
                 order: length
             };
@@ -61,8 +61,8 @@ RoomManager.prototype.requestGameRoom = function (socket) {
 
     // 게임 이벤트 핸들러를 바인딩한다.
     socket.on('game packet', function (message) {
-        var gameroom = self.gameRooms[message.room_id];
-
+        var gameroom = self.gameRooms[message.roomId];
+        if(!gameroom) return;
         gameroom.clientEventHandler.call(gameroom, message);
     })
 };
@@ -70,15 +70,15 @@ RoomManager.prototype.requestGameRoom = function (socket) {
 RoomManager.prototype.createGameRoom = function (socket) {
     var self = this;
 
-    var gameroom = new Game({room_id: Math.random().toString(36).substr(2)});
+    var gameroom = new Game({roomId: Math.random().toString(36).substr(2)});
 
-    socket.join(gameroom.room_id);
+    socket.join(gameroom.roomId);
     //gameroom.on('userleave', self.leaveGameRoom.bind(self));
     gameroom.on('response', self.roomResponse.bind(self));
 
     var options = {
         clientId: socket.id,
-        roomId: gameroom.room_id,
+        roomId: gameroom.roomId,
         randomSeed: Math.random().toString(36).substr(2),
         order: 1
     };
@@ -88,19 +88,19 @@ RoomManager.prototype.createGameRoom = function (socket) {
     socket.emit('welcome', options);
 
     // gameRooms 배열에 새로 생성된 gameRoom을 저장한다
-    self.gameRooms[gameroom.room_id] = gameroom;
+    self.gameRooms[gameroom.roomId] = gameroom;
 
     gameroom.initGame();
     // 맨 처음 들어온 클라이언트에게만 보내는 것을 구상하자
-    self.io.in(gameroom.room_id).emit('activate start button');
+    self.io.in(gameroom.roomId).emit('activate start button');
 };
 
 RoomManager.prototype.roomResponse = function (message) {
     var self = this;
     if (message.broadcast) {
-        self.io.in(message.room_id).emit('game packet', message);
+        self.io.in(message.roomId).emit('game packet', message);
     } else {
-        self.io.to(message.client_id).emit('game packet', message);
+        self.io.to(message.clientId).emit('game packet', message);
     }
 };
 /*

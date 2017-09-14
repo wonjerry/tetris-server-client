@@ -17,7 +17,7 @@ function GameRoom(options) {
     var self = this;
     if (!(self instanceof GameRoom)) return new GameRoom(options);
 
-    self.room_id = options.room_id || Math.random().toString(36).substr(2)
+    self.roomId = options.roomId || Math.random().toString(36).substr(2)
     self.gameState = Util.GAMESTATES.INIT;// 시퀀셜 진행
 
     self.players = {};
@@ -80,8 +80,7 @@ GameRoom.prototype.processInput = function () {
                     if (message.clientId === player.id) {
                         // 여기서 받는 x,y는 delta 값이다
                         // 이 부분 조정해 주어야 한다
-                        player.handleInput(message.input);
-                        console.log(player.getBoard());
+                        player.syncAction(message);
                         //self.lastProcessedInput[message.clientId] = message.sequenceNumber;
                     }
 
@@ -104,8 +103,7 @@ GameRoom.prototype.sendWorldState = function () {
             var player = self.players[key];
             world_state.push({
                 playerId: player.id,
-                x: player.col,
-                y: player.row,
+                processedInputs : player.processedInputs,
                 lastProcessedInput: self.lastProcessedInput[player.id]
             });
 
@@ -113,7 +111,7 @@ GameRoom.prototype.sendWorldState = function () {
     }
 
     var response = {
-        room_id: self.room_id,
+        room_id: self.roomId,
         broadcast: true,
         time: Date.now(),
         seed: Math.random().toString(36).substr(2),
