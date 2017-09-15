@@ -55,7 +55,7 @@ function TetrisGame(options) {
     }
 
 }
-/////////
+
 TetrisGame.prototype.processServerMessages = function () {
     var self = this;
 
@@ -88,7 +88,7 @@ TetrisGame.prototype.processServerMessages = function () {
                     } else {
                         // Not processed by the server yet. Re-apply it.
                         //input에 있는 x,y의 delta 값이다
-                        player.applyInput(input.x,input.y);
+                        player.applyInput(input.x, input.y);
                         j++;
                     }
                 }
@@ -122,60 +122,61 @@ TetrisGame.prototype.processInput = function () {
 
     if (self.key_left) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : -1,
-            y : 0
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: -1,
+            y: 0
         };
     } else if (self.key_right) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : 1,
-            y : 0
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: 1,
+            y: 0
         };
     } else if (self.key_down) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : 0,
-            y : 1
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: 0,
+            y: 1
         };
     } else if (self.key_up) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'right'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'right'
         };
     } else if (self.key_a) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'left'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'left'
         };
     } else if (self.key_s) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'right'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'right'
         };
     } else if (self.key_shift) {
         self.key_shift = false;
+        if(!self.hold()) return;
+
         input = {
-            type : 'hold',
-            currentBlockType : self.block.currentBlock.type,
-            nextBlockType : self.block.currentBlock.type,
-            holdBlockType : self.block.currentBlock.type
+            type: 'hold',
+            currentBlockType: self.block.currentBlock.type,
+            nextBlockType: self.block.currentBlock.type,
+            holdBlockType: self.block.currentBlock.type
         };
-        self.hold();
+
     } else if (self.key_space) {
         self.key_space = false;
         var deltaY = self.letFall();
         input = {
-            type : 'letFall',
-            blockType : self.block.currentBlock.type,
-            x:0,
-            y:deltaY
+            type: 'letFall',
+            blockType: self.block.currentBlock.type,
+            deltaY: deltaY
         };
     } else {
         return;
@@ -183,15 +184,15 @@ TetrisGame.prototype.processInput = function () {
 
     // 만양 회전이나 이동이 불가능 할 때는 input data를 보내지 않는다.
     // 서버에서도 이걸로 validate 검사를 할 수 있을 듯 하다
-    var moveable = false;
+    var moveable = true;
 
-    if(input.type === 'move'){
+    if (input.type === 'move') {
         moveable = self.move(input.y, input.x, self.block.currentBlock.array);
-    }else if(input.type === 'rotate'){
+    } else if (input.type === 'rotate') {
         moveable = self.rotate(input.direction);
     }
 
-    if(!moveable) return;
+    if (!moveable) return;
 
     input.sequenceNumber = self.sequenceNumber++;
     input.clientId = self.id;
@@ -247,14 +248,14 @@ TetrisGame.prototype.handleInput = function (key) {
     }
 };
 
-TetrisGame.prototype.syncAction = function(input) {
+TetrisGame.prototype.syncAction = function (input) {
     var self = this;
 
     var validate = false;
 
-    switch(input.type){
+    switch (input.type) {
         case 'move':
-            validate = self.move(input.y,input.x,self.block.currentBlock.array);
+            validate = self.move(input.y, input.x, self.block.currentBlock.array);
             break;
         case 'move_interval':
             validate = self.go();
@@ -266,12 +267,16 @@ TetrisGame.prototype.syncAction = function(input) {
             var delta = 0;
             delta = self.letFall();
 
-            validate = (delta === input.deltaY);
+            validate = (delta === input.deltaY)
             break;
+        case 'hold':
+            validate = self.hold();
     }
 
+
+    if (!validate) console.warn('invalid event!!!!!!!');
+
     self.processedInputs.push(input);
-    if(!validate) console.warn('invalid event!!!!!!!');
 
 };
 
@@ -440,10 +445,12 @@ TetrisGame.prototype.letFall = function () {
 TetrisGame.prototype.hold = function () {
     var self = this;
 
-    if (!self.holdable) return;
+    if (!self.holdable) return false;
 
     self.holdable = false;
     self.block.hold();
+
+    return true;
 };
 
 TetrisGame.prototype.getIntervalHandler = function () {

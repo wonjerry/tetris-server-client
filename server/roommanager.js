@@ -1,6 +1,6 @@
 var Game = require('./gameroom');
 //var debug = require('debug')('bejeweled:RoomManager');
-var MAX_CLIENT = 2;
+var MAX_CLIENT = 4;
 
 function RoomManager(socketio) {
     var self = this;
@@ -22,9 +22,9 @@ RoomManager.prototype.requestGameRoom = function (socket) {
     for (var key in self.gameRooms) {
         if (self.gameRooms.hasOwnProperty(key)) {
             var gameroom = self.gameRooms[key];
-            var length = gameroom.players.length;
+            var length = Object.keys(gameroom.players).length;
 
-            if (length > MAX_CLIENT) continue;
+            if (length >= MAX_CLIENT) continue;
 
             length++;
             socket.join(key);
@@ -37,18 +37,21 @@ RoomManager.prototype.requestGameRoom = function (socket) {
             };
 
             // 같은 데이터를 server측 player와 client측 player가 가진다
-            gameroom.pushClient(options);
+
+            // 새로운 클라이언트를 받으면 해당 클라이언트의 데이터를 다른 클라이언트에게 전송하며
+            // 다른 플레이어의 시작 데이터들을 배열로 받아서 전송 받게 된다
             socket.emit('welcome', options);
+            gameroom.pushClient(options);
+            self.io.in(gameroom.roomId).emit("player number" , { num : length} );
             // 각 클라이언트들에게 player의 join을 알린다
             // 나중에 해당 클라이언트의 정보도 넘겨 줄 것 이다
 
-            /*
+            // 들어왔다가 나가면 다시 버튼 deactive 하도록 하자.
+            // 아니면 클라이언트에서 어차피 number 알고 있을테니까 그냥 클라이언트에서 처리할까?
             if (length === MAX_CLIENT) {
-                gameroom.initGame();
-                // 맨 처음 들어온 클라이언트에게만 보내는 것을 구상하자
-                self.io.in(gameroom.room_id).emit('activate start button');
+                self.io.in(gameroom.roomId).emit('activate start button');
             }
-            */
+
 
             hasJoined = true
         }
@@ -64,7 +67,15 @@ RoomManager.prototype.requestGameRoom = function (socket) {
         var gameroom = self.gameRooms[message.roomId];
         if(!gameroom) return;
         gameroom.clientEventHandler.call(gameroom, message);
-    })
+    });
+
+    socket.on("start" , function (data) {
+        if (length !== MAX_CLIENT) return;
+
+        self.gameRooms[data.roomId].initGame();
+        self.io.in(data.roomId).emit('start');
+    });
+
 };
 
 RoomManager.prototype.createGameRoom = function (socket) {
@@ -89,10 +100,6 @@ RoomManager.prototype.createGameRoom = function (socket) {
 
     // gameRooms 배열에 새로 생성된 gameRoom을 저장한다
     self.gameRooms[gameroom.roomId] = gameroom;
-
-    gameroom.initGame();
-    // 맨 처음 들어온 클라이언트에게만 보내는 것을 구상하자
-    self.io.in(gameroom.roomId).emit('activate start button');
 };
 
 RoomManager.prototype.roomResponse = function (message) {

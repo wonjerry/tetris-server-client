@@ -3,15 +3,10 @@ var app = express();
 
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
-var util = require('./util');
 var global = require('../client/src/global');
-var TetrisGame = require('./logic/tetris');
 var RoomManager = require('./roommanager');
 
 var roomManager = new RoomManager(io);
-
-var users = [];
-var sockets = {};
 
 app.use(express.static(__dirname + '/../client/public'));
 

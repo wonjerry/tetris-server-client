@@ -9,11 +9,12 @@ function DrawTetrisGame(p) {
 
 
 DrawTetrisGame.prototype.drawGame = function (game) {
-    this.drawNextBlock(game.getNextBlock(), game.startX, 0);
-    this.drawHoldBlock(game.getHoldBlock(), game.startX, 0);
-    this.drawTetrisBoard(game.getBoard(), game.startX, 0);
-    this.drawScore(game.score, game.startX, 0);
-    this.drawState(game.isPause, game.isGameOver, game.startX, 0);
+    var startX = (game.order - 1) * 350;
+    this.drawNextBlock(game.getNextBlock(), startX, 0);
+    this.drawHoldBlock(game.getHoldBlock(), startX, 0);
+    this.drawTetrisBoard(game.getBoard(), startX, 0);
+    this.drawScore(game.score, startX, 0);
+    this.drawState(game.isPause, game.isGameOver, startX, 0);
 };
 
 DrawTetrisGame.prototype.drawTetrisBoard = function (board, Sx, Sy) {

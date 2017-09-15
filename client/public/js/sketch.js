@@ -7702,11 +7702,12 @@ function DrawTetrisGame(p) {
 
 
 DrawTetrisGame.prototype.drawGame = function (game) {
-    this.drawNextBlock(game.getNextBlock(), game.startX, 0);
-    this.drawHoldBlock(game.getHoldBlock(), game.startX, 0);
-    this.drawTetrisBoard(game.getBoard(), game.startX, 0);
-    this.drawScore(game.score, game.startX, 0);
-    this.drawState(game.isPause, game.isGameOver, game.startX, 0);
+    var startX = (game.order - 1) * 350;
+    this.drawNextBlock(game.getNextBlock(), startX, 0);
+    this.drawHoldBlock(game.getHoldBlock(), startX, 0);
+    this.drawTetrisBoard(game.getBoard(), startX, 0);
+    this.drawScore(game.score, startX, 0);
+    this.drawState(game.isPause, game.isGameOver, startX, 0);
 };
 
 DrawTetrisGame.prototype.drawTetrisBoard = function (board, Sx, Sy) {
@@ -7848,6 +7849,8 @@ function ClientManager() {
         query: "type=tetris"
     });
 
+    self.setupStartButton();
+
     self.setupSocket();
 }
 
@@ -7870,28 +7873,30 @@ ClientManager.prototype.setupSocket = function () {
     // Handle connection.
     self.socket.on('welcome', function (message) {
         self.roomId = message.roomId;
-        self.socket.emit('gotit');
-        self.main.startGame(message);
-        //self.socket.on('game packet', self.socketHandler.bind(self));
+        self.main.initGame(message);
+
+        self.socket.on('game packet', function (message) {
+            self.main.socketHandler.call(self.main, message);
+        });
     });
+
+
 
     self.socket.on('activate start button', function () {
         // main의 대기화면 객체의 start button을 활성화 한다.
-        console.log("hihihihihi");
+        self.button.disabled = false;
     });
 
-    self.main.on('start button down', function (param) {
-        //main의 버튼이 눌렸음을 알린다
+    self.socket.on('player number', function (data) {
+        self.button.innerHTML = "Players waiting in this room : " + data.num;
     });
 
     self.socket.on('start', function (param) {
         // 버튼이 눌렸을 때 client 전체에 start 시그널이 발생한다 각 클라이언트는 동시에 게임을 시작한다
+
+        self.main.startGame();
     });
 
-    self.socket.on('playerJoin', function (data) {
-        // player가 입장했을 대 otherplayer를 생성하고 데이터를 구성한다
-        console.log('connected in server :' + data.name);
-    });
     // input을 서버로 보낸다
     self.main.on('Key_Pressed', function (input) {
 
@@ -7899,37 +7904,15 @@ ClientManager.prototype.setupSocket = function () {
     });
 };
 
-
-ClientManager.prototype.socketHandler = function (message) {
+ClientManager.prototype.setupStartButton = function () {
     var self = this;
-    // 서버에 어떤 클라이언트가 입장했을 때
-    if (message.type === 0) {
-        if (message.id == self.socket.id) return;
-        self.main.game.addPlayer(message);
 
-        // 게임 플레이중일때 서버에서 처리한 input message
-    } else if (message.type === 5) {
-
-        if (self.main.game.gameState !== 1) return;
-        //game에도 message queue를 만들어야 한다
-        self.main.game.messages.push(message);
-
-    } else if (message.type === 6) {
-
-        var length = message.otherPlayers.length;
-        var localPlayerId = self.socket.id;
-        var otherPlayers = message.otherPlayers;
-
-        for (var i = 0; i < length; i++) {
-            if (otherPlayers[i].id == localPlayerId) continue;
-
-            self.main.game.addPlayer({order: otherPlayers[i].order, id: otherPlayers[i].id});
-        }
-
-        console.log(self.main.game.players)
-    }
+    self.button = document.getElementById("startButton");
+    self.button.disabled = true;
+    self.button.addEventListener('click', function () {
+        self.socket.emit('start' , {roomId : self.roomId});
+    })
 };
-
 
 },{"./global":55,"./main":57,"socket.io-client":44}],57:[function(require,module,exports){
 var DrawTetrisGame = require('./drawTetrisGame');
@@ -7937,6 +7920,7 @@ var TetrisGameLogic = require('./tetrisGameLogic');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 var global = require('./global');
+var Util = require("./../../server/util");
 
 inherits(Main, EventEmitter);
 
@@ -7956,49 +7940,84 @@ function Main() {
 
     self.game = {};
     self.p5Object = null;
-
-    self.p5sketch = function (p) {
-
-        self.p5Object = p;
-        self.drawObj = new DrawTetrisGame(p);
-        p.setup = function () {
-            p.createCanvas(1500, 850);
-            p.textSize(20);
-            //p.noLoop();
-            p.frameRate(3);
-        };
-
-        p.draw = function () {
-            //if (self.game.find == undefined) return;
-            p.clear();
-            // go 함수는 일정 시간 이후에만 처리되도록 해야한다
-            // keyinput뒤에 redraw하니까 key입력이 많아지면 엄청 빠르게 움직인다
-            self.game.processInput();
-
-            self.drawObj.drawGame(self.game);
-        };
-
-        p.keyPressed = function () {
-            var key = self.allowedKeys[p.keyCode];
-            self.game.handleInput(key);
-            // 나중에 key를 소켓을 통해 보낸다
-            self.emit('Key_Pressed', {keyInput: key});
-            p.redraw();
-        };
-
-        p.keyReleased = function () {
-            self.game.handleInput('key_Released');
-            p.redraw();
-        }
-    };
+    self.otherPlayers = [];
 }
 
-Main.prototype.startGame = function (options) {
+
+Main.prototype.socketHandler = function (message) {
+
+    var self = this;
+    // 서버에 어떤 클라이언트가 입장했을 때 새로운 게임을 생성하고 otherPlayers 배열에 추가한다
+    if (message.type === Util.ACTION_TYPE.CONNECTION) {
+        if (message.clientId === self.game.id) return;
+
+        self.otherPlayers[message.clientId] = new TetrisGameLogic({
+            clientId: message.clientId,
+            roomId: message.roomId,
+            order: message.order,
+            randomSeed: message.randomSeed
+        });
+
+        // 게임 플레이중일때 서버에서 처리한 input message
+    } else if (message.type === Util.ACTION_TYPE.WORLDSTATE_RECEIVED) {
+        // 이 부분을 잘 조정 해 주어야 한다
+        //if (self.main.game.gameState !== 1) return;
+        //game에도 message queue를 만들어야 한다
+        //self.main.game.messages.push(message);
+        var worldState = message.worldState;
+        var wlength = worldState.length;
+
+        for (var i = 0; i < wlength; i++) {
+
+            if (self.game.id === worldState[i].clientId) continue;
+
+            var player = self.otherPlayers[worldState[i].clientId];
+            if (!player) return;
+
+            var ilength = worldState[i].processedInputs.length;
+
+            for (var j = 0; j < ilength; j++) {
+                player.syncAction(worldState[i].processedInputs[j]);
+                if(worldState[i].processedInputs[j].type === 'letFall') {
+                    console.log(worldState[i].processedInputs[j]);
+                }
+
+            }
+
+        }
+
+
+    } else if (message.type === Util.ACTION_TYPE.FETCH_PLAYERS) {
+
+        var tempOthers = message.others;
+
+        var length = tempOthers.length;
+        for (var i = 0; i < length; i++) {
+
+            if (tempOthers[i].clientId === self.game.id) continue;
+
+            self.otherPlayers[tempOthers[i].clientId] = new TetrisGameLogic({
+                clientId: tempOthers[i].clientId,
+                roomId: tempOthers[i].roomId,
+                order: tempOthers[i].order,
+                randomSeed: tempOthers[i].randomSeed
+            });
+
+        }
+
+    }
+};
+
+Main.prototype.initGame = function (options) {
     var self = this;
     self.game = new TetrisGameLogic(options);
+};
+
+Main.prototype.startGame = function () {
+    var self = this;
 
     self.game.on('sendInput', function (input) {
-        console.log(input)
+
         self.emit('Key_Pressed', input);
     });
 
@@ -8017,7 +8036,7 @@ Main.prototype.startGame = function (options) {
                     y: 1,
                     sequenceNumber: self.game.sequenceNumber++
                 };
-                self.emit('Key_Pressed', input)
+                self.emit('Key_Pressed', input);
             } else {
                 // 음 서버에서 이 함수 외부에서 모든 유저가 Gameover인지 체크해서 true이면 clearInterval 하면 될 것 같다.
                 // 일단은 이렇게
@@ -8027,12 +8046,59 @@ Main.prototype.startGame = function (options) {
         global.FALLING_TIME
     );
 
+
+    var playerNum = Object.keys(self.otherPlayers).length + 1;
+    self.p5sketch = function (p) {
+
+        self.p5Object = p;
+        self.drawObj = new DrawTetrisGame(p);
+        p.setup = function () {
+            var parent = document.getElementById("canvasParent");
+            parent.innerHTML = "";
+            var canvas = p.createCanvas(350 * playerNum, 850);
+
+            canvas.parent('canvasParent');
+
+            p.textSize(20);
+            //p.noLoop();
+            p.frameRate(3);
+        };
+
+        p.draw = function () {
+            //if (self.game.find == undefined) return;
+            p.clear();
+            // go 함수는 일정 시간 이후에만 처리되도록 해야한다
+            // keyinput뒤에 redraw하니까 key입력이 많아지면 엄청 빠르게 움직인다
+            self.game.processInput();
+
+            for (var key in self.otherPlayers) {
+                if (self.otherPlayers.hasOwnProperty(key)) {
+                    self.drawObj.drawGame(self.otherPlayers[key]);
+                }
+            }
+            self.drawObj.drawGame(self.game);
+        };
+
+        p.keyPressed = function () {
+            var key = self.allowedKeys[p.keyCode];
+            self.game.handleInput(key);
+            // 나중에 key를 소켓을 통해 보낸다
+            self.emit('Key_Pressed', {keyInput: key});
+            p.redraw();
+        };
+
+        p.keyReleased = function () {
+            self.game.handleInput('key_Released');
+            p.redraw();
+        }
+    };
+
     new p5(self.p5sketch, 'myp5sketch');
 };
 
 
 module.exports = Main;
-},{"./drawTetrisGame":54,"./global":55,"./tetrisGameLogic":59,"events":2,"inherits":30}],58:[function(require,module,exports){
+},{"./../../server/util":60,"./drawTetrisGame":54,"./global":55,"./tetrisGameLogic":59,"events":2,"inherits":30}],58:[function(require,module,exports){
 var global = require('../../client/src/global');
 var SeedRandom = require('seedrandom');
 
@@ -8093,12 +8159,7 @@ function Shape(randomSeed) {
     self.Y = 0;
 
     self.currentBlock = self.randomBlock();
-
     self.nextBlock = self.randomBlock();
-
-    console.log(self.currentBlock.type);
-    console.log(self.nextBlock.type);
-    console.log(randomSeed);
 
     self.holdBlock = {
         array: [
@@ -8210,10 +8271,13 @@ function TetrisGame(options) {
 
     self.history = [];
     self.sequenceNumber = 0;
+    // 클라이언트에서만 사용하는 배열
     self.pendingInputs = [];
-    //space는 밑으로 바로 내려버리는 것 이므로 꾹 누를 필요가 없다
-    //space 처리를 하고 바로 false로 바꾸자
-    //shift도 마찬가지
+    self.messages = [];
+    // 서버에서만 사용하는 배열
+    self.processedInputs = [];
+
+    // key flags
     self.key_right = false;
     self.key_left = false;
     self.key_up = false;
@@ -8245,6 +8309,64 @@ function TetrisGame(options) {
 
 }
 
+TetrisGame.prototype.processServerMessages = function () {
+    var self = this;
+
+    while (self.messages.length !== 0) {
+
+        var message = self.messages.splice(0, 1);
+        var worldStates = message[0].worldState;
+
+        while (worldStates.length !== 0) {
+
+            var state = (worldStates.splice(0, 1))[0];
+
+            var player = null;
+            // 들어온 state가 자기 자신에 관한 것 일 때
+
+            if (self.player.id === state.playerId) {
+                // 여기서 받은 x ,y는 서버측의 player의 position이다
+                player = self.players[0];
+                player.col = state.x;
+                player.row = state.y;
+
+                var j = 0;
+                while (j < self.pendingInputs.length) {
+                    var input = self.pendingInputs[j];
+
+                    if (input.sequenceNumber <= state.lastProcessedInput) {
+                        // Already processed. Its effect is already taken into account into the world update
+                        // we just got, so we can drop it.
+                        self.pendingInputs.splice(j, 1);
+                    } else {
+                        // Not processed by the server yet. Re-apply it.
+                        //input에 있는 x,y의 delta 값이다
+                        player.applyInput(input.x, input.y);
+                        j++;
+                    }
+                }
+
+                // 디른 클라이언트일 때
+            } else {
+
+                self.players.forEach(function (ele) {
+                    if (ele.id === state.playerId) {
+                        //console.log(state.x);
+                        ele.col = state.x;
+                        ele.row = state.y;
+                    }
+
+                });
+
+                //console.log(self.players)
+            }
+
+
+        }
+
+    }
+};
+
 TetrisGame.prototype.processInput = function () {
 
     var self = this;
@@ -8253,60 +8375,61 @@ TetrisGame.prototype.processInput = function () {
 
     if (self.key_left) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : -1,
-            y : 0
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: -1,
+            y: 0
         };
     } else if (self.key_right) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : 1,
-            y : 0
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: 1,
+            y: 0
         };
     } else if (self.key_down) {
         input = {
-            type : 'move',
-            blockType : self.block.currentBlock.type,
-            x : 0,
-            y : 1
+            type: 'move',
+            blockType: self.block.currentBlock.type,
+            x: 0,
+            y: 1
         };
     } else if (self.key_up) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'right'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'right'
         };
     } else if (self.key_a) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'left'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'left'
         };
     } else if (self.key_s) {
         input = {
-            type : 'rotate',
-            blockType : self.block.currentBlock.type,
-            direction : 'right'
+            type: 'rotate',
+            blockType: self.block.currentBlock.type,
+            direction: 'right'
         };
     } else if (self.key_shift) {
         self.key_shift = false;
+        if(!self.hold()) return;
+
         input = {
-            type : 'hold',
-            currentBlockType : self.block.currentBlock.type,
-            nextBlockType : self.block.currentBlock.type,
-            holdBlockType : self.block.currentBlock.type
+            type: 'hold',
+            currentBlockType: self.block.currentBlock.type,
+            nextBlockType: self.block.currentBlock.type,
+            holdBlockType: self.block.currentBlock.type
         };
-        self.hold();
+
     } else if (self.key_space) {
         self.key_space = false;
         var deltaY = self.letFall();
         input = {
-            type : 'letFall',
-            blockType : self.block.currentBlock.type,
-            x:0,
-            y:deltaY
+            type: 'letFall',
+            blockType: self.block.currentBlock.type,
+            deltaY: deltaY
         };
     } else {
         return;
@@ -8314,15 +8437,15 @@ TetrisGame.prototype.processInput = function () {
 
     // 만양 회전이나 이동이 불가능 할 때는 input data를 보내지 않는다.
     // 서버에서도 이걸로 validate 검사를 할 수 있을 듯 하다
-    var moveable = false;
+    var moveable = true;
 
-    if(input.type === 'move'){
+    if (input.type === 'move') {
         moveable = self.move(input.y, input.x, self.block.currentBlock.array);
-    }else if(input.type === 'rotate'){
+    } else if (input.type === 'rotate') {
         moveable = self.rotate(input.direction);
     }
 
-    if(!moveable) return;
+    if (!moveable) return;
 
     input.sequenceNumber = self.sequenceNumber++;
     input.clientId = self.id;
@@ -8378,14 +8501,14 @@ TetrisGame.prototype.handleInput = function (key) {
     }
 };
 
-TetrisGame.prototype.syncAction = function(input) {
+TetrisGame.prototype.syncAction = function (input) {
     var self = this;
 
     var validate = false;
 
-    switch(input.type){
+    switch (input.type) {
         case 'move':
-            validate = self.move(input.y,input.x,self.block.currentBlock.array);
+            validate = self.move(input.y, input.x, self.block.currentBlock.array);
             break;
         case 'move_interval':
             validate = self.go();
@@ -8397,11 +8520,16 @@ TetrisGame.prototype.syncAction = function(input) {
             var delta = 0;
             delta = self.letFall();
 
-            validate = (delta === input.deltaY);
+            validate = (delta === input.deltaY)
             break;
+        case 'hold':
+            validate = self.hold();
     }
 
-    if(!validate) console.warn('invalid event!!!!!!!');
+
+    if (!validate) console.warn('invalid event!!!!!!!');
+
+    self.processedInputs.push(input);
 
 };
 
@@ -8570,10 +8698,12 @@ TetrisGame.prototype.letFall = function () {
 TetrisGame.prototype.hold = function () {
     var self = this;
 
-    if (!self.holdable) return;
+    if (!self.holdable) return false;
 
     self.holdable = false;
     self.block.hold();
+
+    return true;
 };
 
 TetrisGame.prototype.getIntervalHandler = function () {
@@ -8693,4 +8823,21 @@ TetrisGame.prototype.getGameData = function () {
 
 module.exports = TetrisGame;
 
-},{"./global":55,"./shape":58,"events":2,"inherits":30}]},{},[56]);
+},{"./global":55,"./shape":58,"events":2,"inherits":30}],60:[function(require,module,exports){
+module.exports = {
+    GAMESTATES : {
+        INIT: 0,
+        READY: 1
+    },
+    ACTION_TYPE : {
+        CONNECTION: 0,
+        SEED_RECIVED: 1,
+        ACTION_MADE: 2,
+        STATE_RESTORE: 3,
+        DISCONNECT: 4,
+        WORLDSTATE_RECEIVED: 5,
+        FETCH_PLAYERS : 6
+    }
+};
+
+},{}]},{},[56]);

@@ -42,7 +42,7 @@ GameRoom.prototype.initGame = function() {
         var self = this;
         self.processInput();
 
-        //self.sendWorldState();
+        self.sendWorldState();
         /*
 
         for (var key in self.players) {
@@ -66,10 +66,6 @@ GameRoom.prototype.processInput = function () {
     while (true) {
         var message = (self.messages.splice(0, 1))[0];
         if (!message) break;
-
-        // validInput 만들기
-        //if(self.game.validInput()){
-
 
         if (true) {
 
@@ -101,22 +97,23 @@ GameRoom.prototype.sendWorldState = function () {
     for (var key in self.players) {
         if (self.players.hasOwnProperty(key)) {
             var player = self.players[key];
+
             world_state.push({
-                playerId: player.id,
+                clientId: player.id,
                 processedInputs : player.processedInputs,
                 lastProcessedInput: self.lastProcessedInput[player.id]
             });
 
+            player.processedInputs = [];
         }
     }
 
     var response = {
-        room_id: self.roomId,
+        roomId: self.roomId,
         broadcast: true,
         time: Date.now(),
         seed: Math.random().toString(36).substr(2),
         type: Util.ACTION_TYPE.WORLDSTATE_RECEIVED,
-        message: '',
         worldState: world_state
     };
 
@@ -130,7 +127,53 @@ GameRoom.prototype.sendWorldState = function () {
 GameRoom.prototype.pushClient = function(options) {
     var self = this;
     var player = new Player(options);
-    self.players[options.clientId] = player
+    self.players[options.clientId] = player;
+    self.lastProcessedInput[options.id] = 0;
+
+
+    // 현재 추가된 클라이언트를 모든 클라이언트들에게 전송한다
+    var response = {
+        clientId: player.id,
+        roomId : player.roomId,
+        order: player.order,
+        randomSeed : options.randomSeed,
+        broadcast: true,
+        time: Date.now(),
+        type: Util.ACTION_TYPE.CONNECTION
+    };
+
+    // 해당 클라이언트는 이걸 받으면 무시한다
+    // 다른 클라이언트는 이걸 받느면 player를 하나 생성해서 otherPlayers 배열에 넣는다
+    self.emit('response', response);
+
+    var otherplayers = [];
+
+    for (var key in self.players) {
+        if (self.players.hasOwnProperty(key)) {
+            var tempplayer = self.players[key];
+            otherplayers.push({
+                clientId: tempplayer.id,
+                roomId : tempplayer.roomId,
+                order: tempplayer.order,
+                randomSeed : tempplayer.block.randomSeed
+            });
+        }
+    }
+
+    if (otherplayers.length > 1) {
+
+        var response = {
+            clientId: player.id,
+            roomId: player.roomId,
+            broadcast: false,
+            time: Date.now(),
+            type: Util.ACTION_TYPE.FETCH_PLAYERS,
+            others: otherplayers
+        };
+
+        // 이걸 받으면 message에 있는 otherPlayers 배열을 돌면서 player객체를 생성해서 otherPlayers 배열에 넣는다
+        self.emit('response', response)
+    }
 };
 
 /**
