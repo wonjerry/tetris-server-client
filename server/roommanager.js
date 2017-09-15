@@ -70,6 +70,7 @@ RoomManager.prototype.requestGameRoom = function (socket) {
     });
 
     socket.on("start" , function (data) {
+        // 이걸 아마 나중에 정리 해 줘야 될 것 같다
         if (length !== MAX_CLIENT) return;
 
         self.gameRooms[data.roomId].initGame();

@@ -131,6 +131,7 @@ Main.prototype.startGame = function () {
 
 
     var playerNum = Object.keys(self.otherPlayers).length + 1;
+
     self.p5sketch = function (p) {
 
         self.p5Object = p;

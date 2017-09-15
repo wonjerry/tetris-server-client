@@ -330,7 +330,7 @@ TetrisGame.prototype.go = function () {
 TetrisGame.prototype.calculateAndSetScore = function (deletedLineNum) {
     var self = this;
 
-    self.score = deletedLineNum * deletedLineNum * 10;
+    self.score += deletedLineNum * deletedLineNum * 10;
 };
 
 
